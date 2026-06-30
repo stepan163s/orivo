@@ -1,0 +1,12 @@
+# Swift PM / macOS build outputs
+.build/
+.swiftpm/
+Orivo.app/
+DerivedData/
+
+# OS-specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+*.lock
