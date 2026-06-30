@@ -16,6 +16,26 @@ mkdir -p "$RESOURCES_DIR"
 # Copy binary
 cp ".build/release/Orivo" "$MACOS_DIR/Orivo"
 
+# Generate AppIcon.icns if icon.jpg exists
+if [ -f "icon.jpg" ]; then
+    echo "=== Generating AppIcon.icns ==="
+    mkdir -p AppIcon.iconset
+    sips -s format png -z 16 16     icon.jpg --out AppIcon.iconset/icon_16x16.png > /dev/null 2>&1
+    sips -s format png -z 32 32     icon.jpg --out AppIcon.iconset/icon_16x16@2x.png > /dev/null 2>&1
+    sips -s format png -z 32 32     icon.jpg --out AppIcon.iconset/icon_32x32.png > /dev/null 2>&1
+    sips -s format png -z 64 64     icon.jpg --out AppIcon.iconset/icon_32x32@2x.png > /dev/null 2>&1
+    sips -s format png -z 128 128   icon.jpg --out AppIcon.iconset/icon_128x128.png > /dev/null 2>&1
+    sips -s format png -z 256 256   icon.jpg --out AppIcon.iconset/icon_128x128@2x.png > /dev/null 2>&1
+    sips -s format png -z 256 256   icon.jpg --out AppIcon.iconset/icon_256x256.png > /dev/null 2>&1
+    sips -s format png -z 512 512   icon.jpg --out AppIcon.iconset/icon_256x256@2x.png > /dev/null 2>&1
+    sips -s format png -z 512 512   icon.jpg --out AppIcon.iconset/icon_512x512.png > /dev/null 2>&1
+    sips -s format png -z 1024 1024 icon.jpg --out AppIcon.iconset/icon_512x512@2x.png > /dev/null 2>&1
+    
+    iconutil -c icns AppIcon.iconset
+    mv AppIcon.icns "$RESOURCES_DIR/AppIcon.icns"
+    rm -rf AppIcon.iconset
+fi
+
 # Create Info.plist
 cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -34,6 +54,8 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
     <string>1.0.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>NSHighResolutionCapable</key>
