@@ -49,6 +49,18 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
             mpv_set_option_string(handle, "cache-secs", ptr)
         }
         
+        // Force OpenGL API on macOS to prevent Vulkan/MoltenVK context initialization crashes
+        let gpuApi = "opengl"
+        _ = gpuApi.withCString { ptr in
+            mpv_set_option_string(handle, "gpu-api", ptr)
+        }
+        
+        // Force Cocoa OpenGL context wrapper for rendering inside NSView (wid)
+        let gpuContext = "cocoa"
+        _ = gpuContext.withCString { ptr in
+            mpv_set_option_string(handle, "gpu-context", ptr)
+        }
+        
         // Start initialization
         let status = mpv_initialize(handle)
         if status < 0 {
