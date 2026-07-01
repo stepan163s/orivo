@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import AppKit
 
 public struct LibraryWebView: NSViewRepresentable {
     let url: URL
@@ -147,6 +148,19 @@ public struct LibraryWebView: NSViewRepresentable {
             if message.name == "logHandler", let log = message.body as? String {
                 LogManager.shared.log(serviceId: "system", text: "[WebView] \(log)")
             }
+        }
+        
+        public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
+            if let url = navigationAction.request.url {
+                let scheme = url.scheme?.lowercased() ?? ""
+                if scheme != "http" && scheme != "https" && scheme != "file" && scheme != "about" {
+                    LogManager.shared.log(serviceId: "system", text: "LibraryWebView opening external player URL: \(url.absoluteString)")
+                    NSWorkspace.shared.open(url)
+                    decisionHandler(.cancel)
+                    return
+                }
+            }
+            decisionHandler(.allow)
         }
         
         public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
