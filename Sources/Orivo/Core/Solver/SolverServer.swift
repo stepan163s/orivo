@@ -1,19 +1,41 @@
 import Foundation
 import Network
 import WebKit
+import AppKit
 
 @MainActor
 public final class SolverWebViewManager: NSObject, WKNavigationDelegate {
     public static let shared = SolverWebViewManager()
     
     private var webView: WKWebView?
+    private var window: NSWindow?
     private var pendingCompletion: ((String?, [HTTPCookie], String?) -> Void)?
+    
+    private var solveTimer: Timer?
+    private var solveTimeoutWorkItem: DispatchWorkItem?
     
     private override init() {
         super.init()
         let config = WKWebViewConfiguration()
-        self.webView = WKWebView(frame: .zero, configuration: config)
-        self.webView?.navigationDelegate = self
+        config.websiteDataStore = .default()
+        
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 768), configuration: config)
+        webView.navigationDelegate = self
+        // Set standard Mac Safari user agent to ensure Cloudflare doesn't flag us as a bot
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+        self.webView = webView
+        
+        // Host the WebView in an off-screen borderless window so Turnstile JS execution and layout runs at 100% speed
+        let window = NSWindow(
+            contentRect: CGRect(x: -2000, y: -2000, width: 1024, height: 768),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = webView
+        window.isReleasedWhenClosed = false
+        window.orderBack(nil)
+        self.window = window
     }
     
     public func solve(urlString: String, completion: @escaping (String?, [HTTPCookie], String?) -> Void) {
@@ -21,26 +43,92 @@ public final class SolverWebViewManager: NSObject, WKNavigationDelegate {
             completion(nil, [], nil)
             return
         }
+        
+        cancelPendingSolve()
         self.pendingCompletion = completion
         
         let request = URLRequest(url: url)
         webView?.load(request)
+        
+        startPolling(for: url)
     }
     
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        let userAgent = webView.value(forKey: "userAgent") as? String ?? ""
-        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
-            webView.evaluateJavaScript("document.documentElement.outerHTML") { htmlResult, _ in
-                let html = htmlResult as? String ?? ""
-                self?.pendingCompletion?(html, cookies, userAgent)
-                self?.pendingCompletion = nil
+    private func cancelPendingSolve() {
+        solveTimer?.invalidate()
+        solveTimer = nil
+        solveTimeoutWorkItem?.cancel()
+        solveTimeoutWorkItem = nil
+    }
+    
+    private func startPolling(for url: URL) {
+        // Set a hard timeout of 15 seconds
+        let timeoutItem = DispatchWorkItem { [weak self] in
+            self?.finishSolve(status: .timeout)
+        }
+        self.solveTimeoutWorkItem = timeoutItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeoutItem)
+        
+        // Poll for clearance cookies and page state every 500ms
+        solveTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkStatus(for: url)
             }
         }
     }
     
+    private enum SolveStatus {
+        case solved
+        case timeout
+    }
+    
+    private func checkStatus(for url: URL) {
+        guard let webView = webView else { return }
+        
+        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
+            guard let self = self else { return }
+            
+            // Check if Cloudflare's clearance cookie is set
+            let hasClearance = cookies.contains { $0.name == "cf_clearance" }
+            
+            webView.evaluateJavaScript("document.title") { titleResult, _ in
+                let title = titleResult as? String ?? ""
+                
+                webView.evaluateJavaScript("document.documentElement.outerHTML") { htmlResult, _ in
+                    let html = htmlResult as? String ?? ""
+                    
+                    // Verify if Cloudflare challenge elements or title are active
+                    let isChallengeActive = title.contains("Just a moment...") || 
+                                           html.contains("cf-challenge") || 
+                                           html.contains("challenge-platform") || 
+                                           html.contains("Checking your browser")
+                    
+                    if hasClearance || (!isChallengeActive && !html.isEmpty) {
+                        self.finishSolve(status: .solved, html: html, cookies: cookies)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func finishSolve(status: SolveStatus, html: String? = nil, cookies: [HTTPCookie] = []) {
+        cancelPendingSolve()
+        
+        let finalHtml = html
+        let finalCookies = cookies
+        let userAgent = webView?.value(forKey: "userAgent") as? String ?? webView?.customUserAgent ?? ""
+        
+        if let completion = pendingCompletion {
+            completion(finalHtml, finalCookies, userAgent)
+            self.pendingCompletion = nil
+        }
+    }
+    
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        pendingCompletion?(nil, [], nil)
-        pendingCompletion = nil
+        finishSolve(status: .timeout)
+    }
+    
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        finishSolve(status: .timeout)
     }
 }
 
