@@ -59,6 +59,65 @@ public struct LibraryWebView: NSViewRepresentable {
         let logBridgeScript = WKUserScript(source: logBridgeSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(logBridgeScript)
         
+        // 1b. Player interception bridge script
+        let playerBridgeSource = """
+        (function() {
+            function intercept(src) {
+                if (!src) return false;
+                if (src.indexOf(':8090/stream/') !== -1) {
+                    console.log('[Orivo Bridge] Intercepted stream URL: ' + src);
+                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.playerHandler) {
+                        window.webkit.messageHandlers.playerHandler.postMessage(src);
+                    }
+                    return true;
+                }
+                return false;
+            }
+
+            var originalPlay = HTMLMediaElement.prototype.play;
+            HTMLMediaElement.prototype.play = function() {
+                var src = this.src || '';
+                if (!src) {
+                    var source = this.querySelector('source');
+                    if (source) src = source.src || '';
+                }
+                if (intercept(src)) {
+                    this.pause();
+                    return Promise.resolve();
+                }
+                return originalPlay.apply(this, arguments);
+            };
+
+            var originalLoad = HTMLMediaElement.prototype.load;
+            HTMLMediaElement.prototype.load = function() {
+                var src = this.src || '';
+                if (!src) {
+                    var source = this.querySelector('source');
+                    if (source) src = source.src || '';
+                }
+                if (intercept(src)) {
+                    this.pause();
+                    return;
+                }
+                return originalLoad.apply(this, arguments);
+            };
+
+            var originalSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+            if (originalSrcDescriptor && originalSrcDescriptor.set) {
+                var originalSet = originalSrcDescriptor.set;
+                originalSrcDescriptor.set = function(val) {
+                    if (intercept(val)) {
+                        return;
+                    }
+                    originalSet.call(this, val);
+                };
+                Object.defineProperty(HTMLMediaElement.prototype, 'src', originalSrcDescriptor);
+            }
+        })();
+        """
+        let playerBridgeScript = WKUserScript(source: playerBridgeSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        configuration.userContentController.addUserScript(playerBridgeScript)
+        
         // 2. Safe and defensive Lampa localStorage configuration script
         let configSource = """
         (function () {
@@ -129,6 +188,7 @@ public struct LibraryWebView: NSViewRepresentable {
         
         // Register console bridge listener
         configuration.userContentController.add(context.coordinator, name: "logHandler")
+        configuration.userContentController.add(context.coordinator, name: "playerHandler")
         
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -147,6 +207,25 @@ public struct LibraryWebView: NSViewRepresentable {
         public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             if message.name == "logHandler", let log = message.body as? String {
                 LogManager.shared.log(serviceId: "system", text: "[WebView] \(log)")
+            } else if message.name == "playerHandler", let urlString = message.body as? String {
+                LogManager.shared.log(serviceId: "system", text: "LibraryWebView playerHandler received stream URL: \(urlString)")
+                
+                var playerURLString = urlString
+                if NSWorkspace.shared.urlForApplication(toOpen: URL(string: "iina://")!) != nil {
+                    // IINA is installed, open with IINA
+                    if let encodedURL = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+                        playerURLString = "iina://weblink?url=\(encodedURL)"
+                    }
+                } else if NSWorkspace.shared.urlForApplication(toOpen: URL(string: "vlc://")!) != nil {
+                    // VLC is installed, open with VLC
+                    playerURLString = "vlc://\(urlString)"
+                }
+                
+                if let targetURL = URL(string: playerURLString) {
+                    DispatchQueue.main.async {
+                        NSWorkspace.shared.open(targetURL)
+                    }
+                }
             }
         }
         
