@@ -213,12 +213,15 @@ public struct LibraryWebView: NSViewRepresentable {
                 var playerURLString = urlString
                 if NSWorkspace.shared.urlForApplication(toOpen: URL(string: "iina://")!) != nil {
                     // IINA is installed, open with IINA
-                    if let encodedURL = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+                    let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+                    if let encodedURL = urlString.addingPercentEncoding(withAllowedCharacters: allowedCharacters) {
                         playerURLString = "iina://weblink?url=\(encodedURL)"
                     }
                 } else if NSWorkspace.shared.urlForApplication(toOpen: URL(string: "vlc://")!) != nil {
                     // VLC is installed, open with VLC
-                    playerURLString = "vlc://\(urlString)"
+                    if let encodedURL = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+                        playerURLString = "vlc://\(encodedURL)"
+                    }
                 }
                 
                 if let targetURL = URL(string: playerURLString) {
