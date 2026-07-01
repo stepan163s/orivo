@@ -49,6 +49,18 @@ public final class ServiceManager: ObservableObject {
                     }
                 }
                 
+                // Migration: Correct TorrServer port to 8091 to avoid collision with root-owned instance
+                for i in 0..<decoded.count {
+                    if decoded[i].id == "torrserver" {
+                        let torrDbPath = self.servicesDir.appendingPathComponent("torrserver").path
+                        if decoded[i].arguments.contains("8090") || !decoded[i].arguments.contains("-d") {
+                            LogManager.shared.log(serviceId: "system", text: "Migrating TorrServer port and database path to prevent collisions.")
+                            decoded[i].arguments = ["-p", "8091", "-d", torrDbPath]
+                            decoded[i].healthEndpoint = "http://127.0.0.1:8091/echo"
+                        }
+                    }
+                }
+                
                 self.services = decoded
                 saveServices()
             } catch {
@@ -67,14 +79,15 @@ public final class ServiceManager: ObservableObject {
     }
     
     private func loadDefaultServices() {
+        let torrDbPath = servicesDir.appendingPathComponent("torrserver").path
         let torrserver = Service(
             id: "torrserver",
             name: "TorrServer",
             binaryName: "TorrServer",
-            arguments: ["-p", "8090"],
+            arguments: ["-p", "8091", "-d", torrDbPath],
             workingDirectory: nil,
             environment: nil,
-            healthEndpoint: "http://127.0.0.1:8090/echo",
+            healthEndpoint: "http://127.0.0.1:8091/echo",
             restartPolicy: .onCrash,
             autoStart: true
         )

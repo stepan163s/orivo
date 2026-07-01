@@ -34,7 +34,7 @@ public struct Service: Codable, Identifiable, Hashable, Sendable {
     public var arguments: [String]
     public var workingDirectory: String?
     public var environment: [String: String]?
-    public let healthEndpoint: String
+    public var healthEndpoint: String
     public var restartPolicy: RestartPolicy
     public var autoStart: Bool
     

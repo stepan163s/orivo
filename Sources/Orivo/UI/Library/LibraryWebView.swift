@@ -60,7 +60,7 @@ public struct LibraryWebView: NSViewRepresentable {
         (function() {
             function intercept(src) {
                 if (!src) return false;
-                if (src.indexOf(':8090/stream/') !== -1) {
+                if (src.indexOf(':8091/stream/') !== -1) {
                     console.log('[Orivo Bridge] Intercepted stream URL: ' + src);
                     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.playerHandler) {
                         window.webkit.messageHandlers.playerHandler.postMessage(src);
@@ -136,7 +136,7 @@ public struct LibraryWebView: NSViewRepresentable {
                         var jackettProxyBase = 'http://127.0.0.1:8098/jackett';
                         var parserUrl = jackettProxyBase + '/api/v2.0/indexers/all/results/torznab/api?apikey=' + jackettKey + '&';
                         
-                        data.torrserver_url = 'http://127.0.0.1:8090';
+                        data.torrserver_url = 'http://127.0.0.1:8091';
                         data.torrserver_use = true;
                         data.parser_use = true;
                         data.parser_url = parserUrl;
@@ -152,7 +152,7 @@ public struct LibraryWebView: NSViewRepresentable {
                     var jackettKey = '\(jackettAPIKey)';
                     var jackettProxyBase = 'http://127.0.0.1:8098/jackett';
                     var parserUrl = jackettProxyBase + '/api/v2.0/indexers/all/results/torznab/api?apikey=' + jackettKey + '&';
-                    localStorage.setItem('torrserver_url', 'http://127.0.0.1:8090');
+                    localStorage.setItem('torrserver_url', 'http://127.0.0.1:8091');
                     localStorage.setItem('torrserver_use', 'true');
                     localStorage.setItem('parser_use', 'true');
                     localStorage.setItem('parser_url', parserUrl);
