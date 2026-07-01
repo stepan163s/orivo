@@ -102,7 +102,12 @@ public final class ConfigServer: @unchecked Sendable {
         proxyRequest(urlString: urlString, connection: connection)
     }
     private func proxyRequest(urlString: String, connection: NWConnection) {
-        guard let url = URL(string: urlString) else {
+        // Pre-encode raw square brackets to prevent Swift's URL(string:) from triggering double-encoding
+        let cleanURLString = urlString
+            .replacingOccurrences(of: "[", with: "%5B")
+            .replacingOccurrences(of: "]", with: "%5D")
+            
+        guard let url = URL(string: cleanURLString) else {
             sendTextResponse(body: "{\"error\": \"Invalid proxy URL\"}", contentType: "application/json", connection: connection)
             return
         }
