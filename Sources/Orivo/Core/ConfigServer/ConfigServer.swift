@@ -78,10 +78,10 @@ public final class ConfigServer: @unchecked Sendable {
             return
         }
         
-        // CORS proxy: forward /torrserver/* → http://127.0.0.1:8091/*
+        // CORS proxy: forward /torrserver/* → http://127.0.0.1:8090/*
         if path.hasPrefix("/torrserver") {
             let torrPath = String(path.dropFirst("/torrserver".count))
-            let torrURL = "http://127.0.0.1:8091" + (torrPath.isEmpty ? "/" : torrPath)
+            let torrURL = "http://127.0.0.1:8090" + (torrPath.isEmpty ? "/" : torrPath)
             proxyRequest(urlString: torrURL, connection: connection)
             return
         }
@@ -211,7 +211,7 @@ public final class ConfigServer: @unchecked Sendable {
                     var key = keys[i];
                     var data = {};
                     try { var raw = localStorage.getItem(key); if (raw) data = JSON.parse(raw); } catch(e) {}
-                    data.torrserver_url = 'http://127.0.0.1:8091';
+                    data.torrserver_url = 'http://127.0.0.1:8090';
                     data.torrserver_use = true;
                     data.parser_use = true;
                     data.parser_jackett = true;
