@@ -31,6 +31,24 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
             mpv_set_option_string(handle, "terminal", ptr)
         }
         
+        // Enable cache explicitly (so loopback HTTP streams are cached)
+        let cache = "yes"
+        _ = cache.withCString { ptr in
+            mpv_set_option_string(handle, "cache", ptr)
+        }
+        
+        // Set maximum demuxer cache bytes to 150MB
+        let maxBytes = "157286400"
+        _ = maxBytes.withCString { ptr in
+            mpv_set_option_string(handle, "demuxer-max-bytes", ptr)
+        }
+        
+        // Cache up to 300 seconds ahead
+        let cacheSecs = "300"
+        _ = cacheSecs.withCString { ptr in
+            mpv_set_option_string(handle, "cache-secs", ptr)
+        }
+        
         // Start initialization
         let status = mpv_initialize(handle)
         if status < 0 {
