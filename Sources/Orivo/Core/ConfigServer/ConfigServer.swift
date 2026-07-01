@@ -62,6 +62,8 @@ public final class ConfigServer: @unchecked Sendable {
         let method = parts[0]
         let path = parts[1]
         
+        LogManager.shared.log(serviceId: "system", text: "ConfigServer: Received \(method) request for \(path)")
+        
         // Handle CORS preflight so WebKit doesn't block the request
         if method == "OPTIONS" {
             sendPreflightResponse(connection: connection)
@@ -99,15 +101,17 @@ public final class ConfigServer: @unchecked Sendable {
     private func proxyToJackett(urlString: String, connection: NWConnection) {
         proxyRequest(urlString: urlString, connection: connection)
     }
-    
     private func proxyRequest(urlString: String, connection: NWConnection) {
         guard let url = URL(string: urlString) else {
             sendTextResponse(body: "{\"error\": \"Invalid proxy URL\"}", contentType: "application/json", connection: connection)
             return
         }
         
+        LogManager.shared.log(serviceId: "system", text: "ConfigServer: Proxying to upstream URL: \(urlString)")
+        
         let task = URLSession.shared.dataTask(with: url) { data, response, error in
             if let error = error {
+                LogManager.shared.log(serviceId: "system", text: "ConfigServer: Proxy error: \(error.localizedDescription) for \(urlString)", isError: true)
                 let body = "{\"error\": \"\(error.localizedDescription)\"}"
                 self.sendTextResponse(body: body, contentType: "application/json", connection: connection)
                 return
@@ -120,6 +124,8 @@ public final class ConfigServer: @unchecked Sendable {
             
             let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 200
             let upstreamContentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? "application/json; charset=utf-8"
+            
+            LogManager.shared.log(serviceId: "system", text: "ConfigServer: Upstream response status \(httpStatus), content-type \(upstreamContentType) for \(urlString)")
             
             // Inject CORS headers into the proxied response
             let headers = [
@@ -141,7 +147,7 @@ public final class ConfigServer: @unchecked Sendable {
                 content: payload,
                 isComplete: true,
                 completion: .contentProcessed({ _ in
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
                         connection.cancel()
                     }
                 })
@@ -183,7 +189,7 @@ public final class ConfigServer: @unchecked Sendable {
         var payload = headers.data(using: .utf8) ?? Data()
         payload.append(responseData)
         connection.send(content: payload, isComplete: true, completion: .contentProcessed({ _ in
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
                 connection.cancel()
             }
         }))
