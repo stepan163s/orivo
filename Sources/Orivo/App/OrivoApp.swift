@@ -98,7 +98,7 @@ struct OrivoApp: App {
         .windowResizability(.contentSize)
         
         Window("Library", id: "LibraryWindow") {
-            LibraryWebView(url: URL(string: "http://lampa.mx/")!)
+            LibraryWebView()
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 1024, minHeight: 700)
         }

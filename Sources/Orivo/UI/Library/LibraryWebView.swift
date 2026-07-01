@@ -3,11 +3,7 @@ import WebKit
 import AppKit
 
 public struct LibraryWebView: NSViewRepresentable {
-    let url: URL
-    
-    public init(url: URL) {
-        self.url = url
-    }
+    public init() {}
     
     private func getJackettAPIKey() -> String {
         let fileManager = FileManager.default
@@ -122,10 +118,6 @@ public struct LibraryWebView: NSViewRepresentable {
         let configSource = """
         (function () {
             function configure() {
-                if (!window.location || !window.location.hostname || window.location.hostname.indexOf('lampa') === -1) {
-                    return;
-                }
-                
                 try {
                     var keys = ['settings', 'lampa_settings'];
                     for (var i = 0; i < keys.length; i++) {
@@ -174,13 +166,6 @@ public struct LibraryWebView: NSViewRepresentable {
             }
             
             configure();
-            
-            var attempts = 0;
-            var interval = setInterval(function() {
-                configure();
-                attempts++;
-                if (attempts >= 15) clearInterval(interval);
-            }, 300);
         })();
         """
         let configScript = WKUserScript(source: configSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
@@ -193,7 +178,13 @@ public struct LibraryWebView: NSViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.underlyingNSView.setValue(false, forKey: "drawsBackground") // Enable transparent background
-        webView.load(URLRequest(url: url))
+        
+        if let localHTML = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Lampa") {
+            webView.loadFileURL(localHTML, allowingReadAccessTo: localHTML.deletingLastPathComponent())
+        } else {
+            LogManager.shared.log(serviceId: "system", text: "LibraryWebView error: Failed to find local Lampa index.html in resources bundle", isError: true)
+        }
+        
         return webView
     }
     
@@ -210,24 +201,16 @@ public struct LibraryWebView: NSViewRepresentable {
             } else if message.name == "playerHandler", let urlString = message.body as? String {
                 LogManager.shared.log(serviceId: "system", text: "LibraryWebView playerHandler received stream URL: \(urlString)")
                 
-                var playerURLString = urlString
-                if NSWorkspace.shared.urlForApplication(toOpen: URL(string: "iina://")!) != nil {
-                    // IINA is installed, open with IINA
-                    let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
-                    if let encodedURL = urlString.addingPercentEncoding(withAllowedCharacters: allowedCharacters) {
-                        playerURLString = "iina://weblink?url=\(encodedURL)"
-                    }
-                } else if NSWorkspace.shared.urlForApplication(toOpen: URL(string: "vlc://")!) != nil {
-                    // VLC is installed, open with VLC
-                    if let encodedURL = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-                        playerURLString = "vlc://\(encodedURL)"
+                var title = "Orivo Media Player"
+                if let url = URL(string: urlString) {
+                    let filename = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+                    if !filename.isEmpty && filename != "play" && filename != "stream" {
+                        title = filename
                     }
                 }
                 
-                if let targetURL = URL(string: playerURLString) {
-                    DispatchQueue.main.async {
-                        NSWorkspace.shared.open(targetURL)
-                    }
+                DispatchQueue.main.async {
+                    PlayerWindowController.shared.play(url: urlString, title: title)
                 }
             }
         }

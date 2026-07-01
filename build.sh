@@ -16,6 +16,15 @@ mkdir -p "$RESOURCES_DIR"
 # Copy binary
 cp ".build/release/Orivo" "$MACOS_DIR/Orivo"
 
+# Copy libmpv framework into the bundle
+FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
+mkdir -p "$FRAMEWORKS_DIR"
+cp "/Applications/IINA.app/Contents/Frameworks/libmpv.2.dylib" "$FRAMEWORKS_DIR/libmpv.2.dylib"
+
+# Ensure the executable can locate the library inside the Frameworks folder
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/Orivo" || true
+install_name_tool -add_rpath "/Applications/IINA.app/Contents/Frameworks" "$MACOS_DIR/Orivo" || true
+
 # Generate AppIcon.icns if icon.jpg exists
 if [ -f "icon.jpg" ]; then
     echo "=== Generating AppIcon.icns ==="

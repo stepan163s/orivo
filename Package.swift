@@ -11,10 +11,21 @@ let package = Package(
     ],
     dependencies: [],
     targets: [
+        .target(
+            name: "Cmpv",
+            path: "Sources/Cmpv",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "Orivo",
-            dependencies: [],
-            path: "Sources/Orivo"
+            dependencies: ["Cmpv"],
+            path: "Sources/Orivo",
+            resources: [
+                .copy("Resources/Lampa")
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-L/Applications/IINA.app/Contents/Frameworks", "-lmpv.2"])
+            ]
         )
     ]
 )
