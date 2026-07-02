@@ -73,6 +73,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var useTorrServer: Bool
     public var useJackett: Bool
     
+    // External servers configuration
+    public var useExternalServers: Bool
+    public var externalLampaURL: String
+    public var externalTorrServerHost: String
+    public var externalJackettHost: String
+    public var externalJackettApiKey: String
+    
     public init(
         launchAtLogin: Bool,
         player: String,
@@ -83,7 +90,12 @@ public struct AppSettings: Codable, Hashable, Sendable {
         torrserverHost: String = "http://127.0.0.1:8090",
         jackettHost: String = "http://127.0.0.1:9117",
         useTorrServer: Bool = true,
-        useJackett: Bool = true
+        useJackett: Bool = true,
+        useExternalServers: Bool = false,
+        externalLampaURL: String = "",
+        externalTorrServerHost: String = "",
+        externalJackettHost: String = "",
+        externalJackettApiKey: String = ""
     ) {
         self.launchAtLogin = launchAtLogin
         self.player = player
@@ -95,6 +107,11 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.jackettHost = jackettHost
         self.useTorrServer = useTorrServer
         self.useJackett = useJackett
+        self.useExternalServers = useExternalServers
+        self.externalLampaURL = externalLampaURL
+        self.externalTorrServerHost = externalTorrServerHost
+        self.externalJackettHost = externalJackettHost
+        self.externalJackettApiKey = externalJackettApiKey
     }
     
     public init(from decoder: Decoder) throws {
@@ -109,6 +126,12 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.jackettHost = try container.decodeIfPresent(String.self, forKey: .jackettHost) ?? "http://127.0.0.1:9117"
         self.useTorrServer = try container.decodeIfPresent(Bool.self, forKey: .useTorrServer) ?? true
         self.useJackett = try container.decodeIfPresent(Bool.self, forKey: .useJackett) ?? true
+        
+        self.useExternalServers = try container.decodeIfPresent(Bool.self, forKey: .useExternalServers) ?? false
+        self.externalLampaURL = try container.decodeIfPresent(String.self, forKey: .externalLampaURL) ?? ""
+        self.externalTorrServerHost = try container.decodeIfPresent(String.self, forKey: .externalTorrServerHost) ?? ""
+        self.externalJackettHost = try container.decodeIfPresent(String.self, forKey: .externalJackettHost) ?? ""
+        self.externalJackettApiKey = try container.decodeIfPresent(String.self, forKey: .externalJackettApiKey) ?? ""
     }
     
     public static let defaultSettings = AppSettings(
@@ -121,7 +144,12 @@ public struct AppSettings: Codable, Hashable, Sendable {
         torrserverHost: "http://127.0.0.1:8090",
         jackettHost: "http://127.0.0.1:9117",
         useTorrServer: true,
-        useJackett: true
+        useJackett: true,
+        useExternalServers: false,
+        externalLampaURL: "",
+        externalTorrServerHost: "",
+        externalJackettHost: "",
+        externalJackettApiKey: ""
     )
 }
 

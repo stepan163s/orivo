@@ -5,7 +5,7 @@ import AppKit
 public struct LibraryWebView: NSViewRepresentable {
     public init() {}
     
-    private func getJackettAPIKey() -> String {
+    private func getLocalJackettAPIKey() -> String {
         let fileManager = FileManager.default
         let home = fileManager.homeDirectoryForCurrentUser
         
@@ -29,7 +29,16 @@ public struct LibraryWebView: NSViewRepresentable {
     
     public func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        let jackettAPIKey = getJackettAPIKey()
+        let settings = SettingsManager.shared.settings
+        
+        // Resolve dynamic variables based on settings
+        let jackettKey = settings.useExternalServers ? settings.externalJackettApiKey : getLocalJackettAPIKey()
+        let jackettProxyBase = (settings.useExternalServers && !settings.externalJackettHost.isEmpty)
+            ? settings.externalJackettHost
+            : "http://127.0.0.1:8098/jackett"
+        let torrserverURL = (settings.useExternalServers && !settings.externalTorrServerHost.isEmpty)
+            ? settings.externalTorrServerHost
+            : "http://127.0.0.1:8090"
         
         // 1. Console Log redirection bridge script
         let logBridgeSource = """
@@ -60,7 +69,8 @@ public struct LibraryWebView: NSViewRepresentable {
         (function() {
             function intercept(src) {
                 if (!src) return false;
-                if (src.indexOf(':8090/stream/') !== -1) {
+                var baseHost = '\(torrserverURL)';
+                if (src.indexOf(baseHost + '/stream/') !== -1 || src.indexOf(':8090/stream/') !== -1 || src.indexOf('/stream/') !== -1) {
                     console.log('[Orivo Bridge] Intercepted stream URL: ' + src);
                     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.playerHandler) {
                         window.webkit.messageHandlers.playerHandler.postMessage(src);
@@ -121,7 +131,7 @@ public struct LibraryWebView: NSViewRepresentable {
                     }
                 } else if (videos.length > 0 && !activeVideoDetected) {
                     var src = videos[0].src || '';
-                    if (src.indexOf(':8090/stream/') !== -1) {
+                    if (src.indexOf(':8090/stream/') !== -1 || src.indexOf('/stream/') !== -1) {
                         activeVideoDetected = true;
                     }
                 }
@@ -148,11 +158,11 @@ public struct LibraryWebView: NSViewRepresentable {
                             } catch(e) {}
                         }
                         
-                        var jackettKey = '\(jackettAPIKey)';
-                        var jackettProxyBase = 'http://127.0.0.1:8098/jackett';
+                        var jackettKey = '\(jackettKey)';
+                        var jackettProxyBase = '\(jackettProxyBase)';
                         var parserUrl = jackettProxyBase + '/api/v2.0/indexers/all/results/torznab/api?apikey=' + jackettKey + '&';
                         
-                        data.torrserver_url = 'http://127.0.0.1:8090';
+                        data.torrserver_url = '\(torrserverURL)';
                         data.torrserver_use = true;
                         data.parser_use = true;
                         data.parser_url = parserUrl;
@@ -165,10 +175,10 @@ public struct LibraryWebView: NSViewRepresentable {
                     }
                     
                     // Backup flat values
-                    var jackettKey = '\(jackettAPIKey)';
-                    var jackettProxyBase = 'http://127.0.0.1:8098/jackett';
+                    var jackettKey = '\(jackettKey)';
+                    var jackettProxyBase = '\(jackettProxyBase)';
                     var parserUrl = jackettProxyBase + '/api/v2.0/indexers/all/results/torznab/api?apikey=' + jackettKey + '&';
-                    localStorage.setItem('torrserver_url', 'http://127.0.0.1:8090');
+                    localStorage.setItem('torrserver_url', '\(torrserverURL)');
                     localStorage.setItem('torrserver_use', 'true');
                     localStorage.setItem('parser_use', 'true');
                     localStorage.setItem('parser_url', parserUrl);
@@ -198,10 +208,16 @@ public struct LibraryWebView: NSViewRepresentable {
             webView?.evaluateJavaScript("if (typeof Lampa !== 'undefined' && Lampa.Player) { Lampa.Player.close(); } else if (typeof Player !== 'undefined' && Player.close) { Player.close(); }", completionHandler: nil)
         }
         
-        if let localHTML = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Lampa") {
-            webView.loadFileURL(localHTML, allowingReadAccessTo: localHTML.deletingLastPathComponent())
+        // Load local bundle Lampa or external URL
+        if settings.useExternalServers, !settings.externalLampaURL.isEmpty, let extURL = URL(string: settings.externalLampaURL) {
+            LogManager.shared.log(serviceId: "system", text: "LibraryWebView: Loading external Lampa URL: \(extURL)")
+            webView.load(URLRequest(url: extURL))
         } else {
-            LogManager.shared.log(serviceId: "system", text: "LibraryWebView error: Failed to find local Lampa index.html in resources bundle", isError: true)
+            if let localHTML = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Lampa") {
+                webView.loadFileURL(localHTML, allowingReadAccessTo: localHTML.deletingLastPathComponent())
+            } else {
+                LogManager.shared.log(serviceId: "system", text: "LibraryWebView error: Failed to find local Lampa index.html in resources bundle", isError: true)
+            }
         }
         
         return webView

@@ -137,6 +137,10 @@ public final class ServiceManager: ObservableObject {
     }
     
     public func start(serviceId: String) {
+        guard !SettingsManager.shared.settings.useExternalServers else {
+            LogManager.shared.log(serviceId: serviceId, text: "Cannot start local service: External servers mode is enabled.")
+            return
+        }
         guard let service = services.first(where: { $0.id == serviceId }) else { return }
         
         let path = getBinaryPath(for: service)
@@ -229,6 +233,11 @@ public final class ServiceManager: ObservableObject {
     }
     
     public func startAllAutoStartServices() {
+        guard !SettingsManager.shared.settings.useExternalServers else {
+            LogManager.shared.log(serviceId: "system", text: "External servers mode enabled. Local services auto-start skipped.")
+            return
+        }
+        
         for service in services where service.autoStart {
             if isBinaryInstalled(service: service) {
                 start(serviceId: service.id)

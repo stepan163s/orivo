@@ -106,7 +106,12 @@ public final class TorrServerClient: Sendable {
     
     private func getBaseURL() async -> String {
         return await MainActor.run {
-            SettingsManager.shared.settings.torrserverHost
+            let settings = SettingsManager.shared.settings
+            if settings.useExternalServers && !settings.externalTorrServerHost.isEmpty {
+                return settings.externalTorrServerHost
+            } else {
+                return settings.torrserverHost
+            }
         }
     }
     
@@ -157,7 +162,11 @@ public final class TorrServerClient: Sendable {
     
     @MainActor
     public func getPlayURL(hash: String, fileIndex: Int, filename: String) -> String {
-        let base = SettingsManager.shared.settings.torrserverHost
+        let settings = SettingsManager.shared.settings
+        let base = (settings.useExternalServers && !settings.externalTorrServerHost.isEmpty)
+            ? settings.externalTorrServerHost
+            : settings.torrserverHost
+            
         guard let escapedFilename = filename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             return "\(base)/stream/?link=\(hash)&index=\(fileIndex)&play"
         }

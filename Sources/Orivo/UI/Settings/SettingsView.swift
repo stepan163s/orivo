@@ -11,6 +11,7 @@ public struct SettingsView: View {
     @State private var activeCategory: SettingsCategory = .general
     @State private var showingAdvanced = false
     @State private var showingParserSettings = false
+    @State private var showingExternalSettings = false
     @State private var selectedLogServiceId: String? = nil
     
     @State private var indexers: [JackettIndexer] = []
@@ -24,6 +25,7 @@ public struct SettingsView: View {
         case general = "general"
         case parser = "parser"
         case components = "components"
+        case external = "external"
         
         var id: String { self.rawValue }
         
@@ -36,6 +38,8 @@ public struct SettingsView: View {
                 return loc.currentLanguage == "ru" ? "Парсер и Jackett" : "Parser & Jackett"
             case .components:
                 return loc.tr("components")
+            case .external:
+                return loc.currentLanguage == "ru" ? "Внешние сервера" : "External Servers"
             }
         }
         
@@ -44,6 +48,7 @@ public struct SettingsView: View {
             case .general: return "slider.horizontal.3"
             case .parser: return "network"
             case .components: return "cpu"
+            case .external: return "server.rack"
             }
         }
     }
@@ -154,6 +159,8 @@ public struct SettingsView: View {
                                 largeParserCategory
                             case .components:
                                 largeComponentsCategory
+                            case .external:
+                                largeExternalCategory
                             }
                         }
                         .padding(24)
@@ -466,6 +473,102 @@ public struct SettingsView: View {
         .font(.system(size: 13))
     }
     
+    @ViewBuilder
+    private var largeExternalCategory: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Box 1: Toggle
+            VStack(alignment: .leading, spacing: 12) {
+                Text(loc.currentLanguage == "ru" ? "Использование внешних серверов" : "Use External Servers")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                Toggle(loc.currentLanguage == "ru" ? "Использовать внешние сервера" : "Use External Servers", isOn: Binding(
+                    get: { settingsManager.settings.useExternalServers },
+                    set: { newValue in
+                        settingsManager.updateSetting(\.useExternalServers, value: newValue)
+                        if newValue {
+                            serviceManager.stopAllServices()
+                        } else {
+                            serviceManager.startAllAutoStartServices()
+                        }
+                    }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                
+                Text(loc.currentLanguage == "ru" 
+                    ? "При включении локальные службы Jackett и TorrServer будут полностью остановлены для экономии ресурсов." 
+                    : "When enabled, local Jackett and TorrServer services will be stopped to save system resources.")
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            if settingsManager.settings.useExternalServers {
+                // Box 2: Configuration inputs
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(loc.currentLanguage == "ru" ? "Настройка подключения" : "Connection Configuration")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.4))
+                        .padding(.bottom, 2)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Адрес внешнего веб-сервиса Lampa (опционально)" : "External Lampa Web URL (Optional)")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        TextField("Например, http://lampa.mx или локальный адрес сервера", text: Binding(
+                            get: { settingsManager.settings.externalLampaURL },
+                            set: { settingsManager.updateSetting(\.externalLampaURL, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Адрес внешнего TorrServer" : "External TorrServer URL")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        TextField("http://192.168.1.100:8090", text: Binding(
+                            get: { settingsManager.settings.externalTorrServerHost },
+                            set: { settingsManager.updateSetting(\.externalTorrServerHost, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Адрес внешнего Jackett" : "External Jackett URL")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        TextField("http://192.168.1.100:9117", text: Binding(
+                            get: { settingsManager.settings.externalJackettHost },
+                            set: { settingsManager.updateSetting(\.externalJackettHost, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "API-ключ внешнего Jackett" : "External Jackett API Key")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        TextField("Введите API-ключ", text: Binding(
+                            get: { settingsManager.settings.externalJackettApiKey },
+                            set: { settingsManager.updateSetting(\.externalJackettApiKey, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                }
+                .padding(16)
+                .background(Color.white.opacity(0.04))
+                .cornerRadius(12)
+            }
+        }
+        .font(.system(size: 13))
+    }
+    
     // MARK: - Compact Settings View
     private var compactSettingsView: some View {
         VStack(spacing: 0) {
@@ -483,6 +586,13 @@ public struct SettingsView: View {
                 } else if showingParserSettings {
                     ScrollView(.vertical, showsIndicators: false) {
                         parserSettingsView
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 14)
+                    }
+                    .transition(.move(edge: .trailing))
+                } else if showingExternalSettings {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        compactExternalSettingsView
                             .padding(.horizontal, 24)
                             .padding(.vertical, 14)
                     }
@@ -509,6 +619,7 @@ public struct SettingsView: View {
         .background(OrivoTheme.bgWindow)
         .animation(.easeInOut(duration: 0.25), value: showingAdvanced)
         .animation(.easeInOut(duration: 0.25), value: showingParserSettings)
+        .animation(.easeInOut(duration: 0.25), value: showingExternalSettings)
         .animation(.easeInOut(duration: 0.25), value: selectedLogServiceId)
     }
     
@@ -612,6 +723,20 @@ public struct SettingsView: View {
             Button(action: { showingParserSettings = true }) {
                 HStack {
                     Text(loc.currentLanguage == "ru" ? "Источники и Парсер (API)" : "Sources & Parser (API)")
+                        .foregroundColor(OrivoTheme.textSecondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10))
+                        .foregroundColor(OrivoTheme.textTertiary)
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            .font(.system(size: 13))
+            .padding(.top, 2)
+            
+            Button(action: { showingExternalSettings = true }) {
+                HStack {
+                    Text(loc.currentLanguage == "ru" ? "Внешние сервера" : "External Servers")
                         .foregroundColor(OrivoTheme.textSecondary)
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -833,12 +958,101 @@ public struct SettingsView: View {
         }
     }
     
+    private var compactExternalSettingsView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(loc.currentLanguage == "ru" ? "РЕЖИМ ВНЕШНИХ СЕРВЕРОВ" : "EXTERNAL SERVERS MODE")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(OrivoTheme.textTertiary)
+                
+                Toggle(loc.currentLanguage == "ru" ? "Использовать внешние сервера" : "Use External Servers", isOn: Binding(
+                    get: { settingsManager.settings.useExternalServers },
+                    set: { newValue in
+                        settingsManager.updateSetting(\.useExternalServers, value: newValue)
+                        if newValue {
+                            serviceManager.stopAllServices()
+                        } else {
+                            serviceManager.startAllAutoStartServices()
+                        }
+                    }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                .font(.system(size: 13))
+                
+                Text(loc.currentLanguage == "ru" 
+                    ? "Локальные службы будут остановлены." 
+                    : "Local services will be stopped.")
+                    .font(.system(size: 10))
+                    .foregroundColor(OrivoTheme.textSecondary)
+                    .padding(.leading, 18)
+            }
+            
+            if settingsManager.settings.useExternalServers {
+                Divider()
+                    .background(OrivoTheme.borderDefault)
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Внешняя Lampa URL (опция)" : "External Lampa URL (Optional)")
+                            .font(.system(size: 11))
+                            .foregroundColor(OrivoTheme.textSecondary)
+                        TextField("http://lampa.mx", text: Binding(
+                            get: { settingsManager.settings.externalLampaURL },
+                            set: { settingsManager.updateSetting(\.externalLampaURL, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 11))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Внешний TorrServer URL" : "External TorrServer URL")
+                            .font(.system(size: 11))
+                            .foregroundColor(OrivoTheme.textSecondary)
+                        TextField("http://192.168.1.100:8090", text: Binding(
+                            get: { settingsManager.settings.externalTorrServerHost },
+                            set: { settingsManager.updateSetting(\.externalTorrServerHost, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 11))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Внешний Jackett URL" : "External Jackett URL")
+                            .font(.system(size: 11))
+                            .foregroundColor(OrivoTheme.textSecondary)
+                        TextField("http://192.168.1.100:9117", text: Binding(
+                            get: { settingsManager.settings.externalJackettHost },
+                            set: { settingsManager.updateSetting(\.externalJackettHost, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 11))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "API-ключ Jackett" : "Jackett API Key")
+                            .font(.system(size: 11))
+                            .foregroundColor(OrivoTheme.textSecondary)
+                        TextField("API-ключ", text: Binding(
+                            get: { settingsManager.settings.externalJackettApiKey },
+                            set: { settingsManager.updateSetting(\.externalJackettApiKey, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 11))
+                    }
+                }
+            }
+        }
+    }
+    
+    
     private var currentTitle: String {
         if let serviceId = selectedLogServiceId {
             let name = serviceManager.services.first(where: { $0.id == serviceId })?.name ?? "Service"
             return "\(name) Log"
         } else if showingParserSettings {
             return loc.currentLanguage == "ru" ? "Парсер и Jackett" : "Parser & Jackett"
+        } else if showingExternalSettings {
+            return loc.currentLanguage == "ru" ? "Внешние сервера" : "External Servers"
         } else if showingAdvanced {
             return loc.tr("advanced")
         } else {
@@ -863,6 +1077,8 @@ public struct SettingsView: View {
             selectedLogServiceId = nil
         } else if showingParserSettings {
             showingParserSettings = false
+        } else if showingExternalSettings {
+            showingExternalSettings = false
         } else if showingAdvanced {
             showingAdvanced = false
         } else {

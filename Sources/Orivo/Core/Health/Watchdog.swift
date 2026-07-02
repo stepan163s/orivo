@@ -32,6 +32,8 @@ public final class Watchdog {
     }
     
     private func performHealthChecks() {
+        guard !SettingsManager.shared.settings.useExternalServers else { return }
+        
         let services = ServiceManager.shared.services
         let statuses = ServiceManager.shared.statuses
         

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct JackettResponse: Codable {
+public struct JackettResponse: Codable, Sendable {
     public let results: [JackettResult]
     
     enum CodingKeys: String, CodingKey {
@@ -8,10 +8,10 @@ public struct JackettResponse: Codable {
     }
 }
 
-public struct JackettResult: Codable, Identifiable, Hashable {
-    public var id: String { guid ?? link ?? magnetUri ?? UUID().uuidString }
-    public let title: String?
+public struct JackettResult: Codable, Identifiable, Hashable, Sendable {
+    public var id: String { guid ?? link ?? UUID().uuidString }
     public let guid: String?
+    public let title: String?
     public let link: String?
     public let magnetUri: String?
     public let size: Int64?
@@ -20,19 +20,22 @@ public struct JackettResult: Codable, Identifiable, Hashable {
     public let tracker: String?
     public let publishDate: String?
     
-    public var formattedSize: String {
-        guard let sizeBytes = size else { return "0 ГБ" }
-        let gb = Double(sizeBytes) / (1024 * 1024 * 1024)
-        if gb >= 1.0 {
-            return String(format: "%.2f ГБ", gb)
-        } else {
-            let mb = Double(sizeBytes) / (1024 * 1024)
-            return String(format: "%.1f МБ", mb)
-        }
+    public var computedTitle: String {
+        return title ?? "Без названия"
     }
     
-    public var computedTitle: String {
-        return title ?? "Unknown Torrent"
+    public var formattedSize: String {
+        guard let size = size else { return "Размер неизвестен" }
+        let kb = Double(size) / 1024.0
+        let mb = kb / 1024.0
+        let gb = mb / 1024.0
+        if gb >= 1.0 {
+            return String(format: "%.2f ГБ", gb)
+        } else if mb >= 1.0 {
+            return String(format: "%.1f МБ", mb)
+        } else {
+            return String(format: "%.0f КБ", kb)
+        }
     }
     
     public var seedersCount: Int {
@@ -44,8 +47,8 @@ public struct JackettResult: Codable, Identifiable, Hashable {
     }
     
     enum CodingKeys: String, CodingKey {
-        case title = "Title"
         case guid = "Guid"
+        case title = "Title"
         case link = "Link"
         case magnetUri = "MagnetUri"
         case size = "Size"
@@ -69,13 +72,29 @@ public final class JackettClient: Sendable {
     
     private func getBaseURL() async -> String {
         return await MainActor.run {
-            SettingsManager.shared.settings.jackettHost
+            let settings = SettingsManager.shared.settings
+            if settings.useExternalServers && !settings.externalJackettHost.isEmpty {
+                return settings.externalJackettHost
+            } else {
+                return settings.jackettHost
+            }
         }
     }
     
     private init() {}
     
-    private func getJackettAPIKey() -> String {
+    private func getJackettAPIKey() async -> String {
+        return await MainActor.run {
+            let settings = SettingsManager.shared.settings
+            if settings.useExternalServers {
+                return settings.externalJackettApiKey
+            } else {
+                return getLocalJackettAPIKey()
+            }
+        }
+    }
+    
+    private func getLocalJackettAPIKey() -> String {
         let fileManager = FileManager.default
         let home = fileManager.homeDirectoryForCurrentUser
         
@@ -98,9 +117,9 @@ public final class JackettClient: Sendable {
     }
     
     public func search(query: String) async throws -> [JackettResult] {
-        let apiKey = getJackettAPIKey()
+        let apiKey = await getJackettAPIKey()
         guard !apiKey.isEmpty else {
-            throw NSError(domain: "JackettClient", code: 1, userInfo: [NSLocalizedDescriptionKey: "Jackett API Key not found. Please verify Jackett is installed."])
+            throw NSError(domain: "JackettClient", code: 1, userInfo: [NSLocalizedDescriptionKey: "Jackett API Key not found. Please verify Jackett is installed or configure an external server API key."])
         }
         
         let base = await getBaseURL()
@@ -126,7 +145,7 @@ public final class JackettClient: Sendable {
     }
     
     public func fetchIndexers() async throws -> [JackettIndexer] {
-        let apiKey = getJackettAPIKey()
+        let apiKey = await getJackettAPIKey()
         guard !apiKey.isEmpty else { return [] }
         let base = await getBaseURL()
         guard let url = URL(string: "\(base)/api/v2.0/indexers") else { return [] }
