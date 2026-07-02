@@ -45,8 +45,20 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
             mpv_set_option_string(handle, "cache", ptr)
         }
         
-        // Set maximum demuxer cache bytes to 150MB
-        let maxBytes = "157286400"
+        // Set network buffer cache size to 60 seconds
+        let cacheSecs = "60"
+        _ = cacheSecs.withCString { ptr in
+            mpv_set_option_string(handle, "cache-secs", ptr)
+        }
+        
+        // Read ahead up to 60 seconds of video
+        let readaheadSecs = "60"
+        _ = readaheadSecs.withCString { ptr in
+            mpv_set_option_string(handle, "demuxer-readahead-secs", ptr)
+        }
+        
+        // Increase maximum demuxer cache bytes to 500MB (524288000 bytes)
+        let maxBytes = "524288000"
         _ = maxBytes.withCString { ptr in
             mpv_set_option_string(handle, "demuxer-max-bytes", ptr)
         }
