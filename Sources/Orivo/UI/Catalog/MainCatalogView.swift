@@ -488,6 +488,57 @@ struct HorizontalSection: View {
     }
 }
 
+// Custom movie card without title/year labels for the Top 10 rank layout
+struct RankMovieCard: View {
+    let media: TMDBMedia
+    let onSelect: (TMDBMedia) -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: {
+            onSelect(media)
+        }) {
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: media.posterURL) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.white.opacity(0.06))
+                        .overlay(
+                            Image(systemName: "film")
+                                .foregroundColor(.white.opacity(0.2))
+                        )
+                }
+                .frame(width: 130, height: 195)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .shadow(radius: isHovered ? 8 : 2)
+                .scaleEffect(isHovered ? 1.03 : 1.0)
+                .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+                
+                // Rating tag
+                if let rating = media.voteAverage, rating > 0 {
+                    Text(String(format: "%.1f", rating))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(rating >= 7.0 ? Color.green.opacity(0.85) : Color.orange.opacity(0.85))
+                        )
+                        .padding(6)
+                }
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onHover { hover in
+            isHovered = hover
+        }
+    }
+}
+
 // Horizontal Rank list (Top 10 overlay numbers)
 struct RankSection: View {
     let title: String
@@ -502,22 +553,23 @@ struct RankSection: View {
                 .padding(.horizontal, 24)
             
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 24) {
+                HStack(spacing: 28) {
                     ForEach(Array(items.prefix(10).enumerated()), id: \.element.id) { index, media in
                         HStack(alignment: .bottom, spacing: -25) {
                             Text("\(index + 1)")
-                                .font(.system(size: 100, weight: .black, design: .rounded))
+                                .font(.system(size: 130, weight: .black, design: .rounded))
                                 .foregroundColor(.white.opacity(0.85))
-                                .offset(y: 15)
+                                .offset(y: 20) // Offsets vertical padding of system font to sit on the baseline
                                 .zIndex(0)
                             
-                            MovieCard(media: media, onSelect: onSelect)
+                            RankMovieCard(media: media, onSelect: onSelect)
                                 .zIndex(1)
                         }
                         .padding(.leading, index == 0 ? 12 : 0)
                     }
                 }
                 .padding(.horizontal, 24)
+                .padding(.bottom, 12) // Space for scale shadows
             }
         }
     }
