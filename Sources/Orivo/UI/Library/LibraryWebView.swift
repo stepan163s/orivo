@@ -71,6 +71,9 @@ public struct LibraryWebView: NSViewRepresentable {
                 
                 console.log('[Orivo Bridge] Mocking video element');
                 
+                // Add active player class to body to trigger transparency stylesheet rules
+                document.body.classList.add('orivo-player-open');
+                
                 // Force transparency on HTML5 video component
                 video.style.opacity = '0';
                 video.style.backgroundColor = 'transparent';
@@ -251,6 +254,7 @@ public struct LibraryWebView: NSViewRepresentable {
                 if (videos.length === 0 && window.activeVideoElement) {
                     console.log('[Orivo Bridge] Video element removed from DOM, closing player');
                     window.activeVideoElement = null;
+                    document.body.classList.remove('orivo-player-open');
                     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.playerActionHandler) {
                         window.webkit.messageHandlers.playerActionHandler.postMessage({ action: 'close' });
                     }
@@ -259,10 +263,10 @@ public struct LibraryWebView: NSViewRepresentable {
                 }
             }, 500);
             
-            // Inject styles to hide raw video and force transparency on player overlay containers
+            // Inject styles to hide raw video and force transparency on player overlay containers when active
             document.addEventListener('DOMContentLoaded', function() {
                 var style = document.createElement('style');
-                style.innerHTML = 'video { opacity: 0 !important; background: transparent !important; } .player, .player-video, .player-video video, .video-player, .player-box, .player-box__video, .player-box__body, .lampa-player, #player { background: transparent !important; background-color: transparent !important; }';
+                style.innerHTML = 'video { opacity: 0 !important; } html, body { background-color: #141414 !important; } body.orivo-player-open, body.orivo-player-open html, body.orivo-player-open .player, body.orivo-player-open .player-video, body.orivo-player-open .player-video video, body.orivo-player-open .video-player, body.orivo-player-open .player-box, body.orivo-player-open .player-box__video, body.orivo-player-open .player-box__body, body.orivo-player-open .lampa-player, body.orivo-player-open #player { background: transparent !important; background-color: transparent !important; }';
                 document.head.appendChild(style);
             });
         })();
