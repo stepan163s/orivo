@@ -109,6 +109,23 @@ public struct LibraryWebView: NSViewRepresentable {
                 };
                 Object.defineProperty(HTMLMediaElement.prototype, 'src', originalSrcDescriptor);
             }
+
+            var activeVideoDetected = false;
+            setInterval(function() {
+                var videos = document.querySelectorAll('video');
+                if (videos.length === 0 && activeVideoDetected) {
+                    console.log('[Orivo Bridge] Video element removed from DOM, closing player');
+                    activeVideoDetected = false;
+                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.playerHandler) {
+                        window.webkit.messageHandlers.playerHandler.postMessage('close');
+                    }
+                } else if (videos.length > 0 && !activeVideoDetected) {
+                    var src = videos[0].src || '';
+                    if (src.indexOf(':8090/stream/') !== -1) {
+                        activeVideoDetected = true;
+                    }
+                }
+            }, 500);
         })();
         """
         let playerBridgeScript = WKUserScript(source: playerBridgeSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
@@ -178,6 +195,10 @@ public struct LibraryWebView: NSViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         
+        AppStateManager.shared.onClosePlayerRequested = { [weak webView] in
+            webView?.evaluateJavaScript("if (typeof Lampa !== 'undefined' && Lampa.Player) { Lampa.Player.close(); } else if (typeof Player !== 'undefined' && Player.close) { Player.close(); }", completionHandler: nil)
+        }
+        
         if let localHTML = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Lampa") {
             webView.loadFileURL(localHTML, allowingReadAccessTo: localHTML.deletingLastPathComponent())
         } else {
@@ -198,6 +219,14 @@ public struct LibraryWebView: NSViewRepresentable {
             if message.name == "logHandler", let log = message.body as? String {
                 LogManager.shared.log(serviceId: "system", text: "[WebView] \(log)")
             } else if message.name == "playerHandler", let urlString = message.body as? String {
+                if urlString == "close" {
+                    LogManager.shared.log(serviceId: "system", text: "LibraryWebView playerHandler received close command from Lampa")
+                    DispatchQueue.main.async {
+                        AppStateManager.shared.closePlayer()
+                    }
+                    return
+                }
+                
                 LogManager.shared.log(serviceId: "system", text: "LibraryWebView playerHandler received stream URL: \(urlString)")
                 
                 var title = "Orivo Media Player"
