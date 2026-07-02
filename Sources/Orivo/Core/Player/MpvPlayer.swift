@@ -31,7 +31,7 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
             mpv_set_option_string(handle, "hwdec", ptr)
         }
         
-        // Disable terminal output spam
+        // Disable terminal output spam since we're redirecting via callback
         let terminal = "no"
         _ = terminal.withCString { ptr in
             mpv_set_option_string(handle, "terminal", ptr)
@@ -54,6 +54,9 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         _ = vo.withCString { ptr in
             mpv_set_option_string(handle, "vo", ptr)
         }
+        
+        // Request internal logs from mpv at info level
+        mpv_request_log_messages(handle, "info")
         
         // Start initialization
         let status = mpv_initialize(handle)
@@ -238,6 +241,14 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
                 
                 if event.event_id == MPV_EVENT_SHUTDOWN {
                     break
+                }
+                
+                if event.event_id == MPV_EVENT_LOG_MESSAGE {
+                    let log = event.data.assumingMemoryBound(to: mpv_event_log_message.self).pointee
+                    let prefix = String(cString: log.prefix)
+                    let text = String(cString: log.text).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let level = String(cString: log.level)
+                    LogManager.shared.log(serviceId: "system", text: "[mpv] [\(level)] [\(prefix)] \(text)")
                 }
                 
                 if event.event_id == MPV_EVENT_PROPERTY_CHANGE {

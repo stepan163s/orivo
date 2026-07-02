@@ -6,6 +6,9 @@ import Darwin
 @_silgen_name("glGetIntegerv")
 private func glGetIntegerv(_ pname: UInt32, _ params: UnsafeMutablePointer<Int32>)
 
+@_silgen_name("glViewport")
+private func glViewport(_ x: Int32, _ y: Int32, _ width: Int32, _ height: Int32)
+
 private let GL_FRAMEBUFFER_BINDING: UInt32 = 0x8CA6
 
 public class MpvVideoView: NSView {
@@ -92,6 +95,9 @@ public class MpvVideoView: NSView {
         let backingSize = convertToBacking(bounds.size)
         let width = Int32(backingSize.width)
         let height = Int32(backingSize.height)
+        
+        // Set OpenGL viewport to match the backing scale size
+        glViewport(0, 0, width, height)
         
         // Tell player to render the frame into our active FBO
         player.render(fbo: currentFbo, width: width, height: height)
