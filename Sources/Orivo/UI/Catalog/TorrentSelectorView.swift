@@ -249,19 +249,23 @@ public struct TorrentSelectorView: View {
                         .foregroundColor(.white.opacity(0.7))
                 }
             }
+            
+            // Buffering Overlay View
+            if let buffer = activeBufferHash {
+                BufferingOverlayView(
+                    hash: buffer.hash,
+                    fileIndex: activeBufferFileIndex,
+                    filename: activeBufferFilename,
+                    title: title,
+                    onClose: {
+                        activeBufferHash = nil
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(20)
+            }
         }
         .frame(width: 700, height: 500)
-        .sheet(item: $activeBufferHash) { buffer in
-            BufferingOverlayView(
-                hash: buffer.hash,
-                fileIndex: activeBufferFileIndex,
-                filename: activeBufferFilename,
-                title: title,
-                onClose: {
-                    activeBufferHash = nil
-                }
-            )
-        }
         .task {
             await performSearch()
         }

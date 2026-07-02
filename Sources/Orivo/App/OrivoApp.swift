@@ -141,11 +141,17 @@ struct OrivoApp: App {
 
 struct LibraryWindowView: View {
     @StateObject private var appState = AppStateManager.shared
+    @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
     
     var body: some View {
         ZStack {
-            MainCatalogView()
-                .ignoresSafeArea()
+            if catalogInterfaceMode == "native" {
+                MainCatalogView()
+                    .ignoresSafeArea()
+            } else {
+                LibraryWebView()
+                    .ignoresSafeArea()
+            }
             
             if let player = appState.activePlayer {
                 PlayerView(player: player, title: appState.activePlayerTitle, onClose: {

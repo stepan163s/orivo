@@ -6,6 +6,8 @@ public struct SettingsView: View {
     @ObservedObject var loc = LocalizationManager.shared
     @Binding var showSettings: Bool
     
+    @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
+    
     @State private var showingAdvanced = false
     @State private var selectedLogServiceId: String? = nil
     
@@ -147,6 +149,21 @@ public struct SettingsView: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .frame(width: 140)
+            }
+            .font(.system(size: 13))
+            .padding(.top, 2)
+            
+            // Interface selector
+            HStack {
+                Text(loc.currentLanguage == "ru" ? "Каталог" : "Catalog")
+                    .foregroundColor(OrivoTheme.textSecondary)
+                Spacer()
+                Picker("", selection: $catalogInterfaceMode) {
+                    Text(loc.currentLanguage == "ru" ? "Нативный" : "Native").tag("native")
+                    Text("Lampa Web").tag("lampa")
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .frame(width: 160)
             }
             .font(.system(size: 13))
             .padding(.top, 2)
