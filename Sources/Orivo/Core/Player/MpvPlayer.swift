@@ -97,12 +97,6 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
             mpv_set_option_string(handle, "vo", ptr)
         }
         
-        // Flip video vertically because OpenGL has inverted Y axis compared to Core Animation layers
-        let vf = "vflip"
-        _ = vf.withCString { ptr in
-            mpv_set_option_string(handle, "vf", ptr)
-        }
-        
         // Request internal logs from mpv at info level
         mpv_request_log_messages(handle, "info")
         
@@ -200,17 +194,21 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         guard let renderContext = renderContext else { return }
         
         var openglFbo = mpv_opengl_fbo(fbo: fbo, w: width, h: height, internal_format: 0)
+        var flipY: Int32 = 1
         
         withUnsafeMutablePointer(to: &openglFbo) { fboPtr in
-            var apiName = "opengl".cString(using: .utf8)!
-            apiName.withUnsafeMutableBufferPointer { apiNameBuffer in
-                var renderParams: [mpv_render_param] = [
-                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: apiNameBuffer.baseAddress),
-                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: fboPtr),
-                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
-                ]
-                
-                mpv_render_context_render(renderContext, &renderParams)
+            withUnsafeMutablePointer(to: &flipY) { flipYPtr in
+                var apiName = "opengl".cString(using: .utf8)!
+                apiName.withUnsafeMutableBufferPointer { apiNameBuffer in
+                    var renderParams: [mpv_render_param] = [
+                        mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: apiNameBuffer.baseAddress),
+                        mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: fboPtr),
+                        mpv_render_param(type: MPV_RENDER_PARAM_FLIP_Y, data: flipYPtr),
+                        mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                    ]
+                    
+                    mpv_render_context_render(renderContext, &renderParams)
+                }
             }
         }
     }
