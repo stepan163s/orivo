@@ -8,17 +8,12 @@ public class PlayerWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var player: MpvPlayer?
     
-    private var windowCheckTimer: Timer?
-    private var hijackedMpvWindow: NSWindow?
-    private var isClosing = false
-    
     private override init() {
         super.init()
     }
     
     public func play(url: String, title: String) {
         close()
-        isClosing = false
         
         let player = MpvPlayer()
         self.player = player
@@ -43,8 +38,7 @@ public class PlayerWindowController: NSObject, NSWindowDelegate {
         newWindow.minSize = NSSize(width: 640, height: 360)
         newWindow.isReleasedWhenClosed = false
         newWindow.delegate = self
-        newWindow.backgroundColor = .clear // Transparent to let video show from below
-        newWindow.isOpaque = false
+        newWindow.backgroundColor = .black
         newWindow.collectionBehavior = [.fullScreenPrimary, .managed]
         
         let playerView = PlayerView(player: player, title: title) { [weak self] in
@@ -58,25 +52,10 @@ public class PlayerWindowController: NSObject, NSWindowDelegate {
         newWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         
-        // Start monitoring for libmpv window creation
-        startMpvWindowTracking(parentWindow: newWindow)
-        
         player.play(url: url)
     }
     
     public func close() {
-        guard !isClosing else { return }
-        isClosing = true
-        
-        windowCheckTimer?.invalidate()
-        windowCheckTimer = nil
-        
-        NotificationCenter.default.removeObserver(self)
-        
-        if let mpv = hijackedMpvWindow {
-            mpv.close()
-            self.hijackedMpvWindow = nil
-        }
         if let window = window {
             window.close()
             self.window = nil
@@ -87,66 +66,13 @@ public class PlayerWindowController: NSObject, NSWindowDelegate {
         }
     }
     
-    // MARK: - Window Hijacking Mechanism
-    private func startMpvWindowTracking(parentWindow: NSWindow) {
-        windowCheckTimer?.invalidate()
-        windowCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak parentWindow] _ in
-            Task { @MainActor in
-                guard let self = self, let parent = parentWindow else { return }
-                
-                for win in NSApp.windows {
-                    // Find any other visible window in our process that is not the parent and not the main dashboard window
-                    if win !== parent && win.isVisible && win.parent == nil && win.className.contains("Window") {
-                        self.hijackMpvWindow(win, parentWindow: parent)
-                        self.windowCheckTimer?.invalidate()
-                        self.windowCheckTimer = nil
-                        break
-                    }
-                }
-            }
-        }
-    }
-    
-    private func hijackMpvWindow(_ mpvWindow: NSWindow, parentWindow: NSWindow) {
-        LogManager.shared.log(serviceId: "system", text: "PlayerWindowController: Hijacking mpv window \(mpvWindow.title)")
-        self.hijackedMpvWindow = mpvWindow
-        
-        // Make the mpv window borderless
-        mpvWindow.styleMask = [.borderless]
-        mpvWindow.backgroundColor = .black
-        mpvWindow.isOpaque = true
-        mpvWindow.hasShadow = false
-        
-        // Place it directly BELOW our parent window, so our SwiftUI view draws on top!
-        parentWindow.addChildWindow(mpvWindow, ordered: .below)
-        
-        // Sync frame size immediately
-        mpvWindow.setFrame(parentWindow.frame, display: true)
-        
-        // Observe movement and resize notifications to keep frames in sync
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(syncMpvWindowFrame),
-            name: NSWindow.didResizeNotification,
-            object: parentWindow
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(syncMpvWindowFrame),
-            name: NSWindow.didMoveNotification,
-            object: parentWindow
-        )
-    }
-    
-    @objc private func syncMpvWindowFrame(notification: Notification) {
-        guard let parent = notification.object as? NSWindow,
-              let mpv = hijackedMpvWindow else { return }
-        mpv.setFrame(parent.frame, display: true)
-    }
-    
     // MARK: - NSWindowDelegate
     public func windowWillClose(_ notification: Notification) {
-        close()
+        if let player = player {
+            player.destroy()
+            self.player = nil
+        }
+        self.window = nil
         LogManager.shared.log(serviceId: "system", text: "PlayerWindowController window closed, player destroyed")
     }
 }

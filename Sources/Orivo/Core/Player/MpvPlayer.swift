@@ -45,10 +45,10 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
             mpv_set_option_string(handle, "demuxer-max-bytes", ptr)
         }
         
-        // Cache up to 300 seconds ahead
-        let cacheSecs = "300"
-        _ = cacheSecs.withCString { ptr in
-            mpv_set_option_string(handle, "cache-secs", ptr)
+        // Force libmpv video output for render API usage
+        let vo = "libmpv"
+        _ = vo.withCString { ptr in
+            mpv_set_option_string(handle, "vo", ptr)
         }
         
         // Start initialization
@@ -76,6 +76,10 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         
         mpv_terminate_destroy(handle)
         self.handle = nil
+    }
+    
+    public func getHandle() -> OpaquePointer? {
+        return handle
     }
     
     public func play(url: String) {
