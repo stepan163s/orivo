@@ -14,6 +14,8 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     public var onPlaybackStateChanged: ((Bool) -> Void)? // isPlaying
     public var onRenderUpdate: (() -> Void)?
     
+    private var pendingPlayUrl: String? = nil
+    
     private let eventLoopSemaphore = DispatchSemaphore(value: 0)
     
     public override init() {
@@ -143,6 +145,12 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
                     
                     let selfPtr = Unmanaged.passUnretained(self).toOpaque()
                     mpv_render_context_set_update_callback(self.renderContext, updateCallback, selfPtr)
+                    
+                    // If we had a deferred play request, trigger it now
+                    if let pendingUrl = self.pendingPlayUrl {
+                        self.pendingPlayUrl = nil
+                        self.play(url: pendingUrl)
+                    }
                 }
             }
         }
@@ -169,6 +177,13 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     
     public func play(url: String) {
         guard self.handle != nil else { return }
+        
+        if self.renderContext == nil {
+            LogManager.shared.log(serviceId: "system", text: "MpvPlayer play: deferring URL load until render context is setup: \(url)")
+            self.pendingPlayUrl = url
+            return
+        }
+        
         LogManager.shared.log(serviceId: "system", text: "MpvPlayer loading URL: \(url)")
         
         let command = ["loadfile", url, "replace"]
