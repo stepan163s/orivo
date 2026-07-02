@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct PlayerView: View {
     let player: MpvPlayer
+    let url: String
     let title: String
     let onClose: () -> Void
     
@@ -15,8 +16,16 @@ public struct PlayerView: View {
     @State private var dragTime: Double = 0.0
     @State private var trackSelectionVersion: Int = 0
     
-    public init(player: MpvPlayer, title: String, onClose: @escaping () -> Void) {
+    // TorrServer buffering properties
+    @State private var bufferingProgress: Double = 0.0
+    @State private var bufferingSpeed: String = ""
+    @State private var bufferingPeers: String = ""
+    @State private var isTorrServerBuffering: Bool = false
+    @State private var bufferTimer: Timer? = nil
+    
+    public init(player: MpvPlayer, url: String, title: String, onClose: @escaping () -> Void) {
         self.player = player
+        self.url = url
         self.title = title
         self.onClose = onClose
     }
@@ -27,8 +36,8 @@ public struct PlayerView: View {
             MpvVideoViewRepresentable(player: player)
                 .ignoresSafeArea()
             
-            // Hover overlay
-            if isOverlayVisible {
+            // Hover overlay (Controls)
+            if isOverlayVisible && !isTorrServerBuffering {
                 ZStack {
                     // Top Bar
                     VStack {
@@ -44,6 +53,8 @@ public struct PlayerView: View {
                             Spacer()
                             
                             Button(action: {
+                                bufferTimer?.invalidate()
+                                bufferTimer = nil
                                 onClose()
                             }) {
                                 Image(systemName: "xmark")
@@ -235,6 +246,97 @@ public struct PlayerView: View {
                 }
                 .transition(.opacity)
             }
+            
+            // Translucent Buffering Overlay
+            if isTorrServerBuffering {
+                ZStack {
+                    Color.black.opacity(0.85)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: 24) {
+                        VStack(spacing: 8) {
+                            Text(title)
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                                .frame(maxWidth: 400)
+                            Text("Загрузка и буферизация торрента...")
+                                .font(.system(size: 13))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white.opacity(0.1), lineWidth: 8)
+                                .frame(width: 120, height: 120)
+                            
+                            Circle()
+                                .trim(from: 0.0, to: CGFloat(max(bufferingProgress, 0.001)))
+                                .stroke(
+                                    AngularGradient(
+                                        colors: [.blue, .cyan, .blue],
+                                        center: .center
+                                    ),
+                                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                                )
+                                .rotationEffect(Angle(degrees: -90))
+                                .frame(width: 120, height: 120)
+                                .animation(.linear(duration: 0.5), value: bufferingProgress)
+                            
+                            VStack(spacing: 4) {
+                                Text(String(format: "%.0f%%", bufferingProgress * 100))
+                                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        
+                        HStack(spacing: 24) {
+                            VStack {
+                                Text("Скорость")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.4))
+                                Text(bufferingSpeed.isEmpty ? "0 КБ/с" : bufferingSpeed)
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                            }
+                            
+                            VStack {
+                                Text("Пиры")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.4))
+                                Text(bufferingPeers.isEmpty ? "0 / 0" : bufferingPeers)
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(Color.white.opacity(0.04))
+                        .cornerRadius(8)
+                        
+                        Button(action: {
+                            bufferTimer?.invalidate()
+                            bufferTimer = nil
+                            onClose()
+                        }) {
+                            Text("Отмена")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.2))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.red.opacity(0.4), lineWidth: 1)
+                                )
+                                .cornerRadius(6)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(10)
+            }
         }
         .background(Color.black)
         .onContinuousHover { _ in
@@ -243,6 +345,11 @@ public struct PlayerView: View {
         .onAppear {
             setupPlayerCallbacks()
             showOverlayTemporarily()
+            checkForTorrServerBuffering()
+        }
+        .onDisappear {
+            bufferTimer?.invalidate()
+            bufferTimer = nil
         }
     }
     
@@ -275,6 +382,46 @@ public struct PlayerView: View {
                 }
             }
         }
+    }
+    
+    private func checkForTorrServerBuffering() {
+        guard let torrentHash = extractTorrentHash(from: url) else {
+            return
+        }
+        
+        // Pause playback temporarily during initial buffering phase
+        player.pause()
+        isTorrServerBuffering = true
+        
+        bufferTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            Task { @MainActor in
+                do {
+                    let status = try await TorrServerClient.shared.getTorrentStatus(hash: torrentHash)
+                    self.bufferingProgress = status.bufferingProgress
+                    self.bufferingSpeed = status.formattedSpeed
+                    self.bufferingPeers = "\(status.active_peers ?? 0) / \(status.total_peers ?? 0)"
+                    
+                    if status.status == 3 || status.bufferingProgress >= 1.0 {
+                        // Caching complete, close overlay and resume playback
+                        self.isTorrServerBuffering = false
+                        self.bufferTimer?.invalidate()
+                        self.bufferTimer = nil
+                        self.player.play()
+                    }
+                } catch {
+                    print("Buffering check query error: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    private func extractTorrentHash(from urlString: String) -> String? {
+        guard let url = URL(string: urlString),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems else {
+            return nil
+        }
+        return queryItems.first(where: { $0.name == "link" })?.value
     }
     
     private func formatTime(_ seconds: Double) -> String {

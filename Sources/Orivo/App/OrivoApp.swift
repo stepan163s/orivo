@@ -196,7 +196,7 @@ struct LibraryWindowView: View {
                 .ignoresSafeArea()
             
             if let player = appState.activePlayer {
-                PlayerView(player: player, title: appState.activePlayerTitle, onClose: {
+                PlayerView(player: player, url: appState.activePlayerURL, title: appState.activePlayerTitle, onClose: {
                     appState.closePlayer()
                 })
                 .transition(.opacity)

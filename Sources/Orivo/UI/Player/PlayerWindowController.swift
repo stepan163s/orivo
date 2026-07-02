@@ -41,7 +41,7 @@ public class PlayerWindowController: NSObject, NSWindowDelegate {
         newWindow.backgroundColor = .black
         newWindow.collectionBehavior = [.fullScreenPrimary, .managed]
         
-        let playerView = PlayerView(player: player, title: title) { [weak self] in
+        let playerView = PlayerView(player: player, url: url, title: title) { [weak self] in
             self?.close()
         }
         let hostingView = NSHostingView(rootView: playerView)

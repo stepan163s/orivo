@@ -6,6 +6,7 @@ public class AppStateManager: ObservableObject {
     
     @Published public var activePlayer: MpvPlayer? = nil
     @Published public var activePlayerTitle: String = ""
+    @Published public var activePlayerURL: String = ""
     
     public var onPlayerProgress: (@MainActor @Sendable (Double, Double) -> Void)? = nil
     public var onPlayerStateChanged: (@MainActor @Sendable (Bool) -> Void)? = nil
@@ -22,6 +23,7 @@ public class AppStateManager: ObservableObject {
         
         let player = MpvPlayer()
         self.activePlayerTitle = title
+        self.activePlayerURL = url
         self.activePlayer = player
         
         player.onPlaybackProgress = { [weak self] current, total in
