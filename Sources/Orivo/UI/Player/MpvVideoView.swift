@@ -87,48 +87,12 @@ public class MpvVideoView: NSOpenGLView {
     
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window != nil {
-            setupDisplayLink()
-        } else {
-            stopDisplayLinkInternal()
-        }
-    }
-    
-    private func triggerRedraw() {
-        DispatchQueue.main.async { [weak self] in
-            self?.needsDisplay = true
-        }
-    }
-    
-    private func setupDisplayLink() {
-        guard displayLink == nil else { return }
-        
-        let callback: CVDisplayLinkOutputCallback = { _, _, _, _, _, ctx in
-            guard let ctx = ctx else { return kCVReturnSuccess }
-            let view = Unmanaged<MpvVideoView>.fromOpaque(ctx).takeUnretainedValue()
-            view.triggerRedraw()
-            return kCVReturnSuccess
-        }
-        
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
-        if let link = displayLink {
-            CVDisplayLinkSetOutputCallback(link, callback, selfPtr)
-            CVDisplayLinkStart(link)
-        }
-    }
-    
-    private func stopDisplayLinkInternal() {
-        if let link = displayLink {
-            CVDisplayLinkStop(link)
-            self.displayLink = nil
-        }
+        // CVDisplayLink is disabled to avoid flooding the main runloop with async redraw calls at 60Hz/120Hz.
+        // We rely solely on the reactive player.onRenderUpdate callback which triggers only when new decoded frames are ready.
     }
     
     deinit {
-        if let link = displayLink {
-            CVDisplayLinkStop(link)
-        }
+        // Cleanup completed
     }
 }
 
