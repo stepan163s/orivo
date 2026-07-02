@@ -10,6 +10,9 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     public var onPlaybackProgress: ((Double, Double) -> Void)? // currentTime, totalTime
     public var onPlaybackStateChanged: ((Bool) -> Void)? // isPlaying
     
+    private var isInitialized = false
+    private var deferredUrl: String?
+    
     public override init() {
         super.init()
         guard let handle = mpv_create() else {
@@ -60,17 +63,6 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         _ = gpuContext.withCString { ptr in
             mpv_set_option_string(handle, "gpu-context", ptr)
         }
-        
-        // Start initialization
-        let status = mpv_initialize(handle)
-        if status < 0 {
-            let errString = String(cString: mpv_error_string(status))
-            LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: Failed to initialize mpv: \(errString)", isError: true)
-            return
-        }
-        
-        self.isRunning = true
-        startEventLoop()
     }
     
     deinit {
@@ -87,20 +79,47 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     
     public func attach(to nsView: NSView) {
         guard let handle = handle else { return }
+        if isInitialized {
+            LogManager.shared.log(serviceId: "system", text: "MpvPlayer: Already attached and initialized")
+            return
+        }
         
-        // On macOS, the "wid" option takes the raw pointer address to the NSView
+        // On macOS, the "wid" option takes the raw pointer address to the NSView.
+        // MUST be set before mpv_initialize() to prevent mpv from creating a fallback standalone window.
         var viewAddress = Int(bitPattern: Unmanaged.passUnretained(nsView).toOpaque())
         let status = mpv_set_option(handle, "wid", MPV_FORMAT_INT64, &viewAddress)
         if status < 0 {
             let errString = String(cString: mpv_error_string(status))
-            LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: Failed to attach NSView (wid): \(errString)", isError: true)
-        } else {
-            LogManager.shared.log(serviceId: "system", text: "MpvPlayer successfully attached to NSView")
+            LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: Failed to set NSView option (wid): \(errString)", isError: true)
+        }
+        
+        // Start initialization with options fully loaded and wid bound
+        let initStatus = mpv_initialize(handle)
+        if initStatus < 0 {
+            let errString = String(cString: mpv_error_string(initStatus))
+            LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: Failed to initialize mpv: \(errString)", isError: true)
+            return
+        }
+        
+        self.isInitialized = true
+        self.isRunning = true
+        startEventLoop()
+        LogManager.shared.log(serviceId: "system", text: "MpvPlayer successfully attached and initialized with NSView")
+        
+        if let url = deferredUrl {
+            deferredUrl = nil
+            play(url: url)
         }
     }
     
     public func play(url: String) {
         guard self.handle != nil else { return }
+        if !isInitialized {
+            LogManager.shared.log(serviceId: "system", text: "MpvPlayer: play() called before initialization, deferring URL: \(url)")
+            self.deferredUrl = url
+            return
+        }
+        
         LogManager.shared.log(serviceId: "system", text: "MpvPlayer loading URL: \(url)")
         
         let command = ["loadfile", url, "replace"]
