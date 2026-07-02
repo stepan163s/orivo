@@ -195,12 +195,30 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         observeProperty(name: "pause", format: MPV_FORMAT_FLAG)
     }
     
+    public func play() {
+        guard let handle = handle else { return }
+        var pause: Int32 = 0
+        mpv_set_property(handle, "pause", MPV_FORMAT_FLAG, &pause)
+    }
+    
+    public func pause() {
+        guard let handle = handle else { return }
+        var pause: Int32 = 1
+        mpv_set_property(handle, "pause", MPV_FORMAT_FLAG, &pause)
+    }
+    
     public func togglePause() {
         guard let handle = handle else { return }
         var pause: Int32 = 0
         mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &pause)
         var newPause: Int32 = (pause == 0) ? 1 : 0
         mpv_set_property(handle, "pause", MPV_FORMAT_FLAG, &newPause)
+    }
+    
+    public func setSpeed(_ speed: Double) {
+        guard let handle = handle else { return }
+        var val = speed
+        mpv_set_property(handle, "speed", MPV_FORMAT_DOUBLE, &val)
     }
     
     public func seek(to seconds: Double) {

@@ -132,16 +132,16 @@ struct LibraryWindowView: View {
     
     var body: some View {
         ZStack {
+            if let player = appState.activePlayer {
+                MpvVideoViewRepresentable(player: player)
+                    .ignoresSafeArea()
+            } else {
+                Color.black
+                    .ignoresSafeArea()
+            }
+            
             LibraryWebView()
                 .ignoresSafeArea()
-            
-            if let player = appState.activePlayer {
-                PlayerView(player: player, title: appState.activePlayerTitle, onClose: {
-                    appState.closePlayer()
-                })
-                .transition(.opacity)
-                .ignoresSafeArea()
-            }
         }
     }
 }
