@@ -11,22 +11,78 @@ private func glViewport(_ x: Int32, _ y: Int32, _ width: Int32, _ height: Int32)
 
 private let GL_FRAMEBUFFER_BINDING: UInt32 = 0x8CA6
 
-public class MpvVideoView: NSView {
-    private var glContext: NSOpenGLContext?
-    private var pixelFormat: NSOpenGLPixelFormat?
+public class MpvVideoView: NSOpenGLView {
     private var player: MpvPlayer?
     nonisolated(unsafe) private var displayLink: CVDisplayLink?
-    private var isConfigured = false
+    
+    public init() {
+        let attrs: [NSOpenGLPixelFormatAttribute] = [
+            UInt32(NSOpenGLPFADoubleBuffer),
+            UInt32(NSOpenGLPFAColorSize), 24,
+            UInt32(NSOpenGLPFAAlphaSize), 8,
+            UInt32(NSOpenGLPFADepthSize), 24,
+            UInt32(NSOpenGLPFAOpenGLProfile), UInt32(NSOpenGLProfileVersion3_2Core),
+            0
+        ]
+        guard let pf = NSOpenGLPixelFormat(attributes: attrs) else {
+            super.init(frame: .zero, pixelFormat: nil)!
+            return
+        }
+        super.init(frame: .zero, pixelFormat: pf)!
+        
+        self.wantsLayer = true
+        self.wantsBestResolutionOpenGLSurface = true
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        self.wantsLayer = true
+        self.wantsBestResolutionOpenGLSurface = true
+    }
     
     public func setPlayer(_ player: MpvPlayer) {
         self.player = player
-        setupGL()
+        
+        if let glContext = self.openGLContext {
+            player.setupRenderContext(glContext: glContext)
+        }
         
         player.onRenderUpdate = { [weak self] in
             DispatchQueue.main.async {
                 self?.needsDisplay = true
             }
         }
+    }
+    
+    public override func prepareOpenGL() {
+        super.prepareOpenGL()
+        if let glContext = self.openGLContext {
+            glContext.makeCurrentContext()
+            var swapInterval: GLint = 1
+            glContext.setValues(&swapInterval, for: .swapInterval)
+        }
+    }
+    
+    public override func draw(_ dirtyRect: NSRect) {
+        guard let glContext = self.openGLContext, let player = player else {
+            super.draw(dirtyRect)
+            return
+        }
+        
+        glContext.makeCurrentContext()
+        
+        var currentFbo: Int32 = 0
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFbo)
+        
+        let backingSize = convertToBacking(bounds.size)
+        let width = Int32(backingSize.width)
+        let height = Int32(backingSize.height)
+        
+        glViewport(0, 0, width, height)
+        
+        player.render(fbo: currentFbo, width: width, height: height)
+        
+        glContext.flushBuffer()
     }
     
     public override func viewDidMoveToWindow() {
@@ -38,71 +94,10 @@ public class MpvVideoView: NSView {
         }
     }
     
-    private func setupGL() {
-        guard !isConfigured else { return }
-        isConfigured = true
-        
-        let attrs: [NSOpenGLPixelFormatAttribute] = [
-            UInt32(NSOpenGLPFADoubleBuffer),
-            UInt32(NSOpenGLPFAColorSize), 24,
-            UInt32(NSOpenGLPFAAlphaSize), 8,
-            UInt32(NSOpenGLPFADepthSize), 24,
-            UInt32(NSOpenGLPFAOpenGLProfile), UInt32(NSOpenGLProfileVersion3_2Core),
-            0
-        ]
-        
-        guard let pixelFormat = NSOpenGLPixelFormat(attributes: attrs) else {
-            LogManager.shared.log(serviceId: "system", text: "MpvVideoView error: Failed to create OpenGL pixel format", isError: true)
-            return
-        }
-        self.pixelFormat = pixelFormat
-        
-        guard let glContext = NSOpenGLContext(format: pixelFormat, share: nil) else {
-            LogManager.shared.log(serviceId: "system", text: "MpvVideoView error: Failed to create OpenGL context", isError: true)
-            return
-        }
-        self.glContext = glContext
-        glContext.view = self
-        
-        // Make it current
-        glContext.makeCurrentContext()
-        
-        // Let the player setup its rendering context with our OpenGL context
-        if let player = player {
-            player.setupRenderContext(glContext: glContext)
-        }
-    }
-    
     private func triggerRedraw() {
         DispatchQueue.main.async { [weak self] in
             self?.needsDisplay = true
         }
-    }
-    
-    public override func draw(_ dirtyRect: NSRect) {
-        guard let glContext = glContext, let player = player else {
-            super.draw(dirtyRect)
-            return
-        }
-        
-        glContext.makeCurrentContext()
-        
-        // Query the active framebuffer bound by AppKit/CoreAnimation for this view's layer
-        var currentFbo: Int32 = 0
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFbo)
-        
-        // Determine backend viewport scale (for Retina displays backing bounds)
-        let backingSize = convertToBacking(bounds.size)
-        let width = Int32(backingSize.width)
-        let height = Int32(backingSize.height)
-        
-        // Set OpenGL viewport to match the backing scale size
-        glViewport(0, 0, width, height)
-        
-        // Tell player to render the frame into our active FBO
-        player.render(fbo: currentFbo, width: width, height: height)
-        
-        glContext.flushBuffer()
     }
     
     private func setupDisplayLink() {

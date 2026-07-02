@@ -25,8 +25,8 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         self.handle = handle
         
         // Configure options
-        // Enable hardware decoding for low CPU usage
-        let hwdec = "auto"
+        // Disable hardware decoding to prevent NV12 FBO texture corruption on Apple Silicon
+        let hwdec = "no"
         _ = hwdec.withCString { ptr in
             mpv_set_option_string(handle, "hwdec", ptr)
         }
