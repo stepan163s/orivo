@@ -295,8 +295,9 @@ public struct TorrentSelectorView: View {
     }
     
     private func selectTorrent(_ torrent: JackettResult) {
-        guard let link = torrent.link else { return }
-        LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: selectTorrent called for \(torrent.computedTitle)")
+        let targetLink = torrent.magnetUri ?? torrent.link ?? ""
+        guard !targetLink.isEmpty else { return }
+        LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: selectTorrent called for \(torrent.computedTitle) using link: \(targetLink.prefix(80))...")
         
         loadingFilesText = "Загрузка метаданных торрента..."
         isLoadingFiles = true
@@ -304,7 +305,7 @@ public struct TorrentSelectorView: View {
         
         Task {
             do {
-                let addResponse = try await TorrServerClient.shared.addTorrent(link: link, title: torrent.computedTitle)
+                let addResponse = try await TorrServerClient.shared.addTorrent(link: targetLink, title: torrent.computedTitle)
                 let hash = addResponse.hash
                 LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: TorrServer added torrent, hash: \(hash)")
                 

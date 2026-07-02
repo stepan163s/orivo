@@ -20,6 +20,12 @@ public struct TorrServerAddResponse: Codable {
     public let hash: String
     public let title: String?
     public let files: [TorrServerFile]?
+    
+    enum CodingKeys: String, CodingKey {
+        case hash
+        case title
+        case files = "file_stats"
+    }
 }
 
 public struct TorrServerFile: Codable, Identifiable, Hashable {
@@ -45,6 +51,12 @@ public struct TorrServerFile: Codable, Identifiable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(index)
         hasher.combine(path)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case index = "id"
+        case path = "path"
+        case size = "length"
     }
 }
 
@@ -77,13 +89,15 @@ public struct TorrServerStatusResponse: Codable {
     }
     
     enum CodingKeys: String, CodingKey {
-        case hash, title, status, files
+        case hash, title
+        case status = "stat"
         case stat_string = "stat_string"
         case preload_size = "preload_size"
         case loaded_size = "loaded_size"
         case download_speed = "download_speed"
         case active_peers = "active_peers"
         case total_peers = "total_peers"
+        case files = "file_stats"
     }
 }
 

@@ -9,10 +9,11 @@ public struct JackettResponse: Codable {
 }
 
 public struct JackettResult: Codable, Identifiable, Hashable {
-    public var id: String { guid ?? link ?? UUID().uuidString }
+    public var id: String { guid ?? link ?? magnetUri ?? UUID().uuidString }
     public let title: String?
     public let guid: String?
     public let link: String?
+    public let magnetUri: String?
     public let size: Int64?
     public let seeders: Int?
     public let peers: Int?
@@ -46,6 +47,7 @@ public struct JackettResult: Codable, Identifiable, Hashable {
         case title = "Title"
         case guid = "Guid"
         case link = "Link"
+        case magnetUri = "MagnetUri"
         case size = "Size"
         case seeders = "Seeders"
         case peers = "Peers"
