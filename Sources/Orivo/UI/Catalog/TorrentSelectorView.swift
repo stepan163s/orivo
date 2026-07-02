@@ -1,0 +1,334 @@
+import SwiftUI
+
+public struct BufferHash: Identifiable {
+    public let id = UUID()
+    public let hash: String
+    
+    public init(hash: String) {
+        self.hash = hash
+    }
+}
+
+public struct TorrentSelectorView: View {
+    let query: String
+    let title: String
+    let onClose: () -> Void
+    
+    @State private var torrents: [JackettResult] = []
+    @State private var isLoading: Bool = false
+    @State private var errorMessage: String? = nil
+    @State private var sortBySeeders: Bool = true
+    
+    // File list selection states
+    @State private var resolvedFiles: [TorrServerFile] = []
+    @State private var resolvedHash: String? = nil
+    @State private var isLoadingFiles: Bool = false
+    @State private var showFilePicker: Bool = false
+    
+    // Active Buffering states
+    @State private var activeBufferHash: BufferHash? = nil
+    @State private var activeBufferFileIndex: Int = 0
+    @State private var activeBufferFilename: String = ""
+    
+    public var body: some View {
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Header Panel
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Раздачи для")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white.opacity(0.5))
+                        Text(title)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+                    
+                    Spacer()
+                    
+                    // Sort options toggle
+                    Picker("Сортировка", selection: $sortBySeeders) {
+                        Text("По сидам").tag(true)
+                        Text("По размеру").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+                    .onChange(of: sortBySeeders) { _ in
+                        sortTorrents()
+                    }
+                    .padding(.trailing, 12)
+                    
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(20)
+                
+                Divider()
+                    .background(Color.white.opacity(0.1))
+                
+                if isLoading {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                } else if let err = errorMessage {
+                    Spacer()
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 32))
+                            .foregroundColor(.red)
+                        Text(err)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                        Button("Повторить") {
+                            Task {
+                                await performSearch()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    Spacer()
+                } else if torrents.isEmpty {
+                    Spacer()
+                    VStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 32))
+                            .foregroundColor(.white.opacity(0.3))
+                        Text("Ничего не найдено")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    Spacer()
+                } else {
+                    // Torrents Grid list
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(torrents) { tor in
+                                Button(action: {
+                                    selectTorrent(tor)
+                                }) {
+                                    HStack(spacing: 16) {
+                                        // Resolution label or tag indicator
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(tor.computedTitle)
+                                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white)
+                                                .lineLimit(2)
+                                                .multilineTextAlignment(.leading)
+                                            
+                                            HStack(spacing: 12) {
+                                                Text(tor.tracker ?? "Неизвестный")
+                                                    .font(.system(size: 10, weight: .bold))
+                                                    .foregroundColor(.blue.opacity(0.9))
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                                    .background(Color.blue.opacity(0.15))
+                                                    .cornerRadius(4)
+                                                
+                                                Text(tor.formattedSize)
+                                                    .font(.system(size: 11, weight: .medium))
+                                                    .foregroundColor(.white.opacity(0.6))
+                                            }
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        // Peers count details
+                                        HStack(spacing: 12) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "arrow.up.circle.fill")
+                                                    .foregroundColor(.green)
+                                                Text("\(tor.seedersCount)")
+                                                    .font(.system(size: 11, weight: .bold))
+                                                    .foregroundColor(.green)
+                                            }
+                                            
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "arrow.down.circle.fill")
+                                                    .foregroundColor(.orange)
+                                                Text("\(tor.peersCount)")
+                                                    .font(.system(size: 11, weight: .bold))
+                                                    .foregroundColor(.orange)
+                                            }
+                                        }
+                                        .frame(width: 100)
+                                    }
+                                    .padding(12)
+                                    .background(Color.white.opacity(0.04))
+                                    .cornerRadius(8)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(20)
+                    }
+                }
+            }
+            
+            // Sub-sheet: Multiple File Picker inside Torrent
+            if showFilePicker, let hash = resolvedHash {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Выберите файл для воспроизведения")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Button(action: { showFilePicker = false }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 24, height: 24)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    .padding(20)
+                    
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                    
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(resolvedFiles) { file in
+                                Button(action: {
+                                    showFilePicker = false
+                                    startBuffering(hash: hash, fileIndex: file.index, filename: file.filename)
+                                }) {
+                                    HStack {
+                                        Image(systemName: "play.circle")
+                                            .foregroundColor(.blue)
+                                        Text(file.filename)
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Text(file.formattedSize)
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.white.opacity(0.5))
+                                    }
+                                    .padding(10)
+                                    .background(Color.white.opacity(0.04))
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(20)
+                    }
+                }
+                .frame(width: 500, height: 350)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .cornerRadius(12)
+                .shadow(radius: 15)
+                .transition(.scale)
+            }
+            
+            // Loading Overlay when resolving torrent metadata files
+            if isLoadingFiles {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("Загрузка метаданных торрента...")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            }
+        }
+        .frame(width: 700, height: 500)
+        .sheet(item: $activeBufferHash) { buffer in
+            BufferingOverlayView(
+                hash: buffer.hash,
+                fileIndex: activeBufferFileIndex,
+                filename: activeBufferFilename,
+                title: title,
+                onClose: {
+                    activeBufferHash = nil
+                }
+            )
+        }
+        .task {
+            await performSearch()
+        }
+    }
+    
+    private func performSearch() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            let results = try await JackettClient.shared.search(query: query)
+            self.torrents = results
+            sortTorrents()
+        } catch {
+            self.errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+    
+    private func sortTorrents() {
+        if sortBySeeders {
+            torrents.sort { $0.seedersCount > $1.seedersCount }
+        } else {
+            torrents.sort { ($0.size ?? 0) > ($1.size ?? 0) }
+        }
+    }
+    
+    private func selectTorrent(_ torrent: JackettResult) {
+        guard let link = torrent.link else { return }
+        isLoadingFiles = true
+        Task {
+            do {
+                let addResponse = try await TorrServerClient.shared.addTorrent(link: link, title: torrent.computedTitle)
+                let files = addResponse.files ?? []
+                
+                // Filter out non-video files
+                let videoExtensions = ["mkv", "mp4", "avi", "mov", "ts"]
+                let videoFiles = files.filter { file in
+                    let ext = (file.path as NSString).pathExtension.lowercased()
+                    return videoExtensions.contains(ext)
+                }
+                
+                isLoadingFiles = false
+                
+                if videoFiles.isEmpty {
+                    // No videos found, error
+                    self.errorMessage = "В раздаче не найдены поддерживаемые видеофайлы."
+                } else if videoFiles.count == 1 {
+                    // Only one video file: auto play!
+                    startBuffering(hash: addResponse.hash, fileIndex: videoFiles[0].index, filename: videoFiles[0].filename)
+                } else {
+                    // Multiple files: open select picker
+                    self.resolvedFiles = videoFiles
+                    self.resolvedHash = addResponse.hash
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        self.showFilePicker = true
+                    }
+                }
+            } catch {
+                isLoadingFiles = false
+                print("Failed to add torrent in TorrServer: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func startBuffering(hash: String, fileIndex: Int, filename: String) {
+        self.activeBufferFileIndex = fileIndex
+        self.activeBufferFilename = filename
+        self.activeBufferHash = BufferHash(hash: hash)
+    }
+}

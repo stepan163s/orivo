@@ -144,7 +144,7 @@ struct LibraryWindowView: View {
     
     var body: some View {
         ZStack {
-            LibraryWebView()
+            MainCatalogView()
                 .ignoresSafeArea()
             
             if let player = appState.activePlayer {
