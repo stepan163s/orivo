@@ -4,6 +4,8 @@ import AppKit
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setupSignalHandlers()
+        
         MenuBarController.shared.setupMenuBar()
         MenuBarController.shared.onOpenDashboard = {
             self.showMainWindow()
@@ -30,6 +32,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ServiceManager.shared.startAllAutoStartServices()
             Watchdog.shared.startMonitoring()
         }
+    }
+    
+    private func setupSignalHandlers() {
+        let sigtermHandler: @convention(c) (Int32) -> Void = { sig in
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
+        }
+        signal(SIGTERM, sigtermHandler)
+        signal(SIGINT, sigtermHandler)
     }
     
     func applicationWillTerminate(_ notification: Notification) {
