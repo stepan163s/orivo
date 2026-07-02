@@ -41,6 +41,7 @@ public struct MainCatalogView: View {
     @State private var errorMessage: String? = nil
     
     @StateObject private var library = LibraryManager.shared
+    @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
     
     public init() {}
     
@@ -132,137 +133,142 @@ public struct MainCatalogView: View {
                 Color(nsColor: .windowBackgroundColor)
                     .ignoresSafeArea()
                 
-                switch selectedTab {
-                case .trending:
-                    ScrollView {
-                        VStack(spacing: 28) {
-                            if !trendingMovies.isEmpty {
-                                HeroMarqueeView(items: trendingMovies) { media in
-                                    selectedMedia = media
-                                }
-                            }
-                            
-                            RankSection(title: "Топ-10 фильмов на Orivo", items: trendingMovies) { media in
-                                selectedMedia = media
-                            }
-                            .padding(.top, 10)
-                            
-                            HorizontalSection(title: "Сериалы в тренде", items: trendingTVShows) { media in
-                                selectedMedia = media
-                            }
-                        }
-                        .padding(.bottom, 32)
-                    }
-                    .ignoresSafeArea()
-                    
-                case .movies:
-                    ScrollView {
-                        VStack(spacing: 28) {
-                            if !popularMovies.isEmpty {
-                                HeroMarqueeView(items: popularMovies) { media in
-                                    selectedMedia = media
-                                }
-                            }
-                            
-                            HorizontalSection(title: "Популярные фильмы", items: popularMovies) { media in
-                                selectedMedia = media
-                            }
-                        }
-                        .padding(.bottom, 32)
-                    }
-                    .ignoresSafeArea()
-                    
-                case .tvShows:
-                    ScrollView {
-                        VStack(spacing: 28) {
-                            if !popularTVShows.isEmpty {
-                                HeroMarqueeView(items: popularTVShows) { media in
-                                    selectedMedia = media
-                                }
-                            }
-                            
-                            HorizontalSection(title: "Популярные сериалы", items: popularTVShows) { media in
-                                selectedMedia = media
-                            }
-                        }
-                        .padding(.bottom, 32)
-                    }
-                    .ignoresSafeArea()
-                    
-                case .search:
-                    VStack(spacing: 0) {
-                        Spacer().frame(height: 52)
-                        
-                        // Search Bar Header
-                        HStack(spacing: 12) {
-                            HStack {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(.white.opacity(0.4))
-                                TextField("Поиск фильмов, сериалов...", text: $searchQuery)
-                                    .textFieldStyle(PlainTextFieldStyle())
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 14))
-                                    .onSubmit {
-                                        performSearch()
+                if catalogInterfaceMode == "lampa" && [.trending, .movies, .tvShows, .search].contains(selectedTab) {
+                    LibraryWebView()
+                        .ignoresSafeArea()
+                } else {
+                    switch selectedTab {
+                    case .trending:
+                        ScrollView {
+                            VStack(spacing: 28) {
+                                if !trendingMovies.isEmpty {
+                                    HeroMarqueeView(items: trendingMovies) { media in
+                                        selectedMedia = media
                                     }
+                                }
+                                
+                                RankSection(title: "Топ-10 фильмов на Orivo", items: trendingMovies) { media in
+                                    selectedMedia = media
+                                }
+                                .padding(.top, 10)
+                                
+                                HorizontalSection(title: "Сериалы в тренде", items: trendingTVShows) { media in
+                                    selectedMedia = media
+                                }
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(8)
-                            
-                            Button("Найти") {
-                                performSearch()
-                            }
-                            .buttonStyle(.borderedProminent)
+                            .padding(.bottom, 32)
                         }
-                        .padding(24)
+                        .ignoresSafeArea()
                         
-                        if isSearching {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
-                        } else if searchResults.isEmpty {
-                            Spacer()
-                            VStack(spacing: 8) {
-                                Image(systemName: "magnifyingglass")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.white.opacity(0.3))
-                                Text("Введите поисковый запрос")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.5))
+                    case .movies:
+                        ScrollView {
+                            VStack(spacing: 28) {
+                                if !popularMovies.isEmpty {
+                                    HeroMarqueeView(items: popularMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                HorizontalSection(title: "Популярные фильмы", items: popularMovies) { media in
+                                    selectedMedia = media
+                                }
                             }
-                            Spacer()
-                        } else {
-                            ScrollView {
-                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140, maximum: 160), spacing: 16)], spacing: 20) {
-                                    ForEach(searchResults) { media in
-                                        MovieCard(media: media) { selected in
-                                            selectedMedia = selected
+                            .padding(.bottom, 32)
+                        }
+                        .ignoresSafeArea()
+                        
+                    case .tvShows:
+                        ScrollView {
+                            VStack(spacing: 28) {
+                                if !popularTVShows.isEmpty {
+                                    HeroMarqueeView(items: popularTVShows) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                HorizontalSection(title: "Популярные сериалы", items: popularTVShows) { media in
+                                    selectedMedia = media
+                                }
+                            }
+                            .padding(.bottom, 32)
+                        }
+                        .ignoresSafeArea()
+                        
+                    case .search:
+                        VStack(spacing: 0) {
+                            Spacer().frame(height: 52)
+                            
+                            // Search Bar Header
+                            HStack(spacing: 12) {
+                                HStack {
+                                    Image(systemName: "magnifyingglass")
+                                        .foregroundColor(.white.opacity(0.4))
+                                    TextField("Поиск фильмов, сериалов...", text: $searchQuery)
+                                        .textFieldStyle(PlainTextFieldStyle())
+                                        .foregroundColor(.white)
+                                        .font(.system(size: 14))
+                                        .onSubmit {
+                                            performSearch()
+                                        }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.08))
+                                .cornerRadius(8)
+                                
+                                Button("Найти") {
+                                    performSearch()
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                            .padding(24)
+                            
+                            if isSearching {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            } else if searchResults.isEmpty {
+                                Spacer()
+                                VStack(spacing: 8) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.white.opacity(0.3))
+                                    Text("Введите поисковый запрос")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.5))
+                                }
+                                Spacer()
+                            } else {
+                                ScrollView {
+                                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140, maximum: 160), spacing: 16)], spacing: 20) {
+                                        ForEach(searchResults) { media in
+                                            MovieCard(media: media) { selected in
+                                                selectedMedia = selected
+                                            }
                                         }
                                     }
+                                    .padding(.horizontal, 24)
+                                    .padding(.bottom, 24)
                                 }
-                                .padding(.horizontal, 24)
-                                .padding(.bottom, 24)
                             }
                         }
+                        
+                    case .history:
+                        historyView
+                            .padding(.top, 40)
+                        
+                    case .favorites:
+                        favoritesView
+                            .padding(.top, 40)
+                        
+                    case .settings:
+                        SettingsView(showSettings: .constant(true))
+                            .padding(.top, 40)
                     }
-                    
-                case .history:
-                    historyView
-                        .padding(.top, 40)
-                    
-                case .favorites:
-                    favoritesView
-                        .padding(.top, 40)
-                    
-                case .settings:
-                    SettingsView(showSettings: .constant(true))
-                        .padding(.top, 40)
                 }
                 
-                // Loading Overlay
-                if isLoading {
+                // Loading Overlay (Only visible in native mode)
+                if isLoading && catalogInterfaceMode == "native" {
                     Color.black.opacity(0.4)
                         .ignoresSafeArea()
                     ProgressView()
