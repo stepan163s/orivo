@@ -8,6 +8,7 @@ public struct SettingsView: View {
     
     @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
     
+    @State private var activeCategory: SettingsCategory = .general
     @State private var showingAdvanced = false
     @State private var showingParserSettings = false
     @State private var selectedLogServiceId: String? = nil
@@ -19,22 +20,455 @@ public struct SettingsView: View {
         self._showSettings = showSettings
     }
     
-    private var currentTitle: String {
-        if let serviceId = selectedLogServiceId {
-            let name = serviceManager.services.first(where: { $0.id == serviceId })?.name ?? "Service"
-            return "\(name) Log"
-        } else if showingParserSettings {
-            return loc.currentLanguage == "ru" ? "Парсер и Jackett" : "Parser & Jackett"
-        } else if showingAdvanced {
-            return loc.tr("advanced")
-        } else {
-            return loc.tr("settings")
+    enum SettingsCategory: String, CaseIterable, Identifiable {
+        case general = "general"
+        case parser = "parser"
+        case components = "components"
+        
+        var id: String { self.rawValue }
+        
+        @MainActor
+        func title(loc: LocalizationManager) -> String {
+            switch self {
+            case .general:
+                return loc.tr("general")
+            case .parser:
+                return loc.currentLanguage == "ru" ? "Парсер и Jackett" : "Parser & Jackett"
+            case .components:
+                return loc.tr("components")
+            }
+        }
+        
+        var icon: String {
+            switch self {
+            case .general: return "slider.horizontal.3"
+            case .parser: return "network"
+            case .components: return "cpu"
+            }
         }
     }
     
     public var body: some View {
+        GeometryReader { geo in
+            if geo.size.width >= 600 {
+                // Wide, spacious, macOS native-style settings pane
+                largeTwoPaneLayout
+            } else {
+                // Original compact settings list for small window dashboard
+                compactSettingsView
+            }
+        }
+    }
+    
+    // MARK: - Large Two-Pane Layout
+    private var largeTwoPaneLayout: some View {
+        HStack(spacing: 0) {
+            // Sidebar Navigation Pane
+            VStack(alignment: .leading, spacing: 6) {
+                Text(loc.tr("settings"))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 24)
+                    .padding(.bottom, 12)
+                
+                ForEach(SettingsCategory.allCases) { category in
+                    Button(action: {
+                        selectedLogServiceId = nil
+                        activeCategory = category
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: category.icon)
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 18, alignment: .leading)
+                            Text(category.title(loc: loc))
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                            Spacer()
+                        }
+                        .foregroundColor(activeCategory == category && selectedLogServiceId == nil ? .white : .white.opacity(0.7))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(activeCategory == category && selectedLogServiceId == nil ? Color.white.opacity(0.12) : Color.clear)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(.horizontal, 8)
+                
+                Spacer()
+            }
+            .frame(width: 220)
+            .background(Color.white.opacity(0.02))
+            
+            Divider()
+                .background(Color.white.opacity(0.1))
+            
+            // Details Pane Content area
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                    .ignoresSafeArea()
+                
+                if let serviceId = selectedLogServiceId {
+                    // Logs view inside details pane
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Button(action: { selectedLogServiceId = nil }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.left")
+                                    Text("Назад к службам")
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.blue)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            Spacer()
+                            
+                            Button(action: triggerClearLogs) {
+                                Text(loc.tr("clear"))
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.blue)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                        .padding(.bottom, 4)
+                        
+                        LogConsoleView(serviceId: serviceId, activeLogServiceId: $selectedLogServiceId)
+                    }
+                    .padding(24)
+                    .transition(.move(edge: .trailing))
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 20) {
+                            Text(activeCategory.title(loc: loc))
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .padding(.bottom, 8)
+                            
+                            switch activeCategory {
+                            case .general:
+                                largeGeneralCategory
+                            case .parser:
+                                largeParserCategory
+                            case .components:
+                                largeComponentsCategory
+                            }
+                        }
+                        .padding(24)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .preferredColorScheme(.dark)
+    }
+    
+    // MARK: - Category Sections
+    @ViewBuilder
+    private var largeGeneralCategory: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Box 1: Startup & Window policies
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Запуск и закрытие")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                Toggle(loc.tr("launch_login"), isOn: Binding(
+                    get: { settingsManager.settings.launchAtLogin },
+                    set: { settingsManager.updateSetting(\.launchAtLogin, value: $0) }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                
+                Toggle(loc.tr("open_library_launch"), isOn: Binding(
+                    get: { settingsManager.settings.openLibraryOnLaunch },
+                    set: { settingsManager.updateSetting(\.openLibraryOnLaunch, value: $0) }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                
+                Toggle(loc.tr("quit_on_close"), isOn: Binding(
+                    get: { settingsManager.settings.quitOnClose },
+                    set: { settingsManager.updateSetting(\.quitOnClose, value: $0) }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Box 2: Interface config
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Язык и интерфейс")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                HStack {
+                    Text(loc.tr("language"))
+                        .foregroundColor(.white.opacity(0.8))
+                    Spacer()
+                    Picker("", selection: $loc.currentLanguage) {
+                        Text(loc.tr("english")).tag("en")
+                        Text(loc.tr("russian")).tag("ru")
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 140)
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.08))
+                
+                HStack {
+                    Text(loc.currentLanguage == "ru" ? "Интерфейс каталога" : "Catalog Interface")
+                        .foregroundColor(.white.opacity(0.8))
+                    Spacer()
+                    Picker("", selection: $catalogInterfaceMode) {
+                        Text(loc.currentLanguage == "ru" ? "Нативный" : "Native").tag("native")
+                        Text("Lampa Web").tag("lampa")
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 160)
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+        }
+        .font(.system(size: 13))
+    }
+    
+    @ViewBuilder
+    private var largeParserCategory: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // TorrServer group
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Встроенный TorrServer")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.4))
+                    Spacer()
+                    Button("Открыть Web UI") {
+                        openServiceWebUI(serviceId: "torrserver")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                Toggle(loc.currentLanguage == "ru" ? "Использовать встроенный TorrServer" : "Use TorrServer", isOn: Binding(
+                    get: { settingsManager.settings.useTorrServer },
+                    set: { settingsManager.updateSetting(\.useTorrServer, value: $0) }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                
+                if settingsManager.settings.useTorrServer {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Адрес TorrServer" : "TorrServer Host URL")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        
+                        TextField("http://127.0.0.1:8090", text: Binding(
+                            get: { settingsManager.settings.torrserverHost },
+                            set: { settingsManager.updateSetting(\.torrserverHost, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Jackett group
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Интеграция Jackett")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.4))
+                    Spacer()
+                    Button("Открыть Web UI") {
+                        openServiceWebUI(serviceId: "jackett")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                Toggle(loc.currentLanguage == "ru" ? "Использовать Jackett" : "Use Jackett", isOn: Binding(
+                    get: { settingsManager.settings.useJackett },
+                    set: { settingsManager.updateSetting(\.useJackett, value: $0) }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                
+                if settingsManager.settings.useJackett {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Адрес Jackett" : "Jackett Host URL")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        
+                        TextField("http://127.0.0.1:9117", text: Binding(
+                            get: { settingsManager.settings.jackettHost },
+                            set: { settingsManager.updateSetting(\.jackettHost, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Jackett Indexers
+            if settingsManager.settings.useJackett {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text(loc.currentLanguage == "ru" ? "Активные индексаторы Jackett" : "Active Jackett Indexers")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white.opacity(0.4))
+                        Spacer()
+                        Button(action: loadIndexers) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12))
+                                .foregroundColor(.blue)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    
+                    if isLoadingIndexers {
+                        HStack {
+                            Spacer()
+                            ProgressView().scaleEffect(0.8)
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                    } else if indexers.isEmpty {
+                        Text(loc.currentLanguage == "ru" ? "Индексаторы не найдены." : "No indexers found.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.5))
+                    } else {
+                        VStack(spacing: 6) {
+                            ForEach(indexers) { indexer in
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill((indexer.configured ?? false) ? Color.green : Color.gray)
+                                        .frame(width: 6, height: 6)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(indexer.name ?? "Без названия")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(.white)
+                                        
+                                        if let desc = indexer.description, !desc.isEmpty {
+                                            Text(desc)
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.white.opacity(0.5))
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    Spacer()
+                                    Text((indexer.configured ?? false) ? (loc.currentLanguage == "ru" ? "Активен" : "Active") : (loc.currentLanguage == "ru" ? "Не активен" : "Inactive"))
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundColor((indexer.configured ?? false) ? Color.green : .white.opacity(0.4))
+                                }
+                                .padding(8)
+                                .background(Color.white.opacity(0.03))
+                                .cornerRadius(6)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+                .background(Color.white.opacity(0.04))
+                .cornerRadius(12)
+                .task {
+                    loadIndexers()
+                }
+            }
+        }
+        .font(.system(size: 13))
+    }
+    
+    @ViewBuilder
+    private var largeComponentsCategory: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Box 1: Services statuses
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Статус служб")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                ForEach(serviceManager.services) { service in
+                    let status = serviceManager.statuses[service.id] ?? .stopped
+                    HStack {
+                        Text(service.name)
+                            .foregroundColor(.white.opacity(0.8))
+                        Spacer()
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(status.isRunning ? Color.green : Color.red)
+                                .frame(width: 6, height: 6)
+                            Text(loc.tr(status.rawValue.lowercased()))
+                                .foregroundColor(status.isRunning ? .green : .white.opacity(0.5))
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.08))
+                
+                HStack {
+                    Text(loc.tr("mac_ip"))
+                        .foregroundColor(.white.opacity(0.8))
+                    Spacer()
+                    Text(getLocalIPAddress())
+                        .foregroundColor(.white)
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Box 2: Logs
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Логирование и отладка")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                    .padding(.bottom, 2)
+                
+                ForEach(serviceManager.services) { service in
+                    Button(action: { selectedLogServiceId = service.id }) {
+                        HStack {
+                            Text("\(service.name) - Лог работы")
+                                .foregroundColor(.blue)
+                            Spacer()
+                            Image(systemName: "terminal")
+                                .font(.system(size: 12))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.03))
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+        }
+        .font(.system(size: 13))
+    }
+    
+    // MARK: - Compact Settings View
+    private var compactSettingsView: some View {
         VStack(spacing: 0) {
-            // Unified Navigation Header
             navigationHeader
             
             Divider()
@@ -80,12 +514,10 @@ public struct SettingsView: View {
     
     private var navigationHeader: some View {
         ZStack {
-            // Centered Screen Title
             Text(currentTitle)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundColor(OrivoTheme.textPrimary)
             
-            // Left Navigation (Back button, pushed past macOS traffic lights)
             HStack {
                 Button(action: handleBackAction) {
                     Image(systemName: "chevron.left")
@@ -96,12 +528,11 @@ public struct SettingsView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(PlainButtonStyle())
-                .padding(.leading, 70) // Safety space to clear traffic lights horizontally
+                .padding(.leading, 70)
                 
                 Spacer()
             }
             
-            // Right Action (Clear logs button, visible only in console view)
             if selectedLogServiceId != nil {
                 HStack {
                     Spacer()
@@ -116,12 +547,11 @@ public struct SettingsView: View {
             }
         }
         .frame(height: 48)
-        .padding(.top, 16) // Pushes header down below the rounded corners
+        .padding(.top, 16)
     }
     
     private var mainSettingsView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // General settings
             VStack(alignment: .leading, spacing: 8) {
                 Text(loc.tr("general"))
                     .font(.system(size: 11, weight: .bold))
@@ -151,7 +581,6 @@ public struct SettingsView: View {
             }
             .font(.system(size: 13))
             
-            // Language selector
             HStack {
                 Text(loc.tr("language"))
                     .foregroundColor(OrivoTheme.textSecondary)
@@ -166,7 +595,6 @@ public struct SettingsView: View {
             .font(.system(size: 13))
             .padding(.top, 2)
             
-            // Interface selector
             HStack {
                 Text(loc.currentLanguage == "ru" ? "Каталог" : "Catalog")
                     .foregroundColor(OrivoTheme.textSecondary)
@@ -181,7 +609,6 @@ public struct SettingsView: View {
             .font(.system(size: 13))
             .padding(.top, 2)
             
-            // Parser Settings Navigation row
             Button(action: { showingParserSettings = true }) {
                 HStack {
                     Text(loc.currentLanguage == "ru" ? "Источники и Парсер (API)" : "Sources & Parser (API)")
@@ -199,7 +626,6 @@ public struct SettingsView: View {
             Divider()
                 .background(OrivoTheme.borderDefault)
             
-            // Components section
             VStack(alignment: .leading, spacing: 8) {
                 Text(loc.tr("components"))
                     .font(.system(size: 11, weight: .bold))
@@ -232,7 +658,6 @@ public struct SettingsView: View {
             Divider()
                 .background(OrivoTheme.borderDefault)
             
-            // Local Network section
             VStack(alignment: .leading, spacing: 6) {
                 Text(loc.tr("local_network"))
                     .font(.system(size: 11, weight: .bold))
@@ -252,7 +677,6 @@ public struct SettingsView: View {
             Divider()
                 .background(OrivoTheme.borderDefault)
             
-            // Advanced navigation button
             Button(action: { showingAdvanced = true }) {
                 HStack {
                     Text(loc.tr("advanced_dots"))
@@ -293,7 +717,6 @@ public struct SettingsView: View {
     
     private var parserSettingsView: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // TorrServer Settings
             VStack(alignment: .leading, spacing: 6) {
                 Text(loc.currentLanguage == "ru" ? "НАСТРОЙКИ TORRSERVER" : "TORRSERVER SETTINGS")
                     .font(.system(size: 10, weight: .bold))
@@ -326,7 +749,6 @@ public struct SettingsView: View {
             Divider()
                 .background(OrivoTheme.borderDefault)
             
-            // Jackett Settings
             VStack(alignment: .leading, spacing: 6) {
                 Text(loc.currentLanguage == "ru" ? "НАСТРОЙКИ JACKETT" : "JACKETT SETTINGS")
                     .font(.system(size: 10, weight: .bold))
@@ -359,7 +781,6 @@ public struct SettingsView: View {
             Divider()
                 .background(OrivoTheme.borderDefault)
             
-            // Active Indexers via API
             VStack(alignment: .leading, spacing: 8) {
                 Text(loc.currentLanguage == "ru" ? "АКТИВНЫЕ ИНДЕКСАТОРЫ JACKETT" : "ACTIVE JACKETT INDEXERS")
                     .font(.system(size: 10, weight: .bold))
@@ -368,8 +789,7 @@ public struct SettingsView: View {
                 if isLoadingIndexers {
                     HStack {
                         Spacer()
-                        ProgressView()
-                            .scaleEffect(0.8)
+                        ProgressView().scaleEffect(0.8)
                         Spacer()
                     }
                     .padding(.vertical, 8)
@@ -396,9 +816,7 @@ public struct SettingsView: View {
                                         .lineLimit(1)
                                 }
                             }
-                            
                             Spacer()
-                            
                             Text((indexer.configured ?? false) ? (loc.currentLanguage == "ru" ? "Активен" : "Active") : (loc.currentLanguage == "ru" ? "Не активен" : "Inactive"))
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor((indexer.configured ?? false) ? Color.green : OrivoTheme.textTertiary)
@@ -412,6 +830,19 @@ public struct SettingsView: View {
         }
         .task {
             loadIndexers()
+        }
+    }
+    
+    private var currentTitle: String {
+        if let serviceId = selectedLogServiceId {
+            let name = serviceManager.services.first(where: { $0.id == serviceId })?.name ?? "Service"
+            return "\(name) Log"
+        } else if showingParserSettings {
+            return loc.currentLanguage == "ru" ? "Парсер и Jackett" : "Parser & Jackett"
+        } else if showingAdvanced {
+            return loc.tr("advanced")
+        } else {
+            return loc.tr("settings")
         }
     }
     
