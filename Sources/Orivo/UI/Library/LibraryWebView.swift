@@ -195,12 +195,7 @@ public struct LibraryWebView: NSViewRepresentable {
             }
             
             function intercept(video, src) {
-                if (!src) {
-                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.playerActionHandler) {
-                        window.webkit.messageHandlers.playerActionHandler.postMessage({ action: 'close' });
-                    }
-                    return false;
-                }
+                if (!src) return false;
                 if (src.indexOf(':8090/stream/') !== -1) {
                     console.log('[Orivo Bridge] Intercepted stream source: ' + src);
                     mockVideoElement(video);
@@ -250,16 +245,24 @@ public struct LibraryWebView: NSViewRepresentable {
                 Object.defineProperty(HTMLMediaElement.prototype, 'src', originalSrcDescriptor);
             }
             
-            // Periodically check for video elements added by other means
+            // Periodically check for video elements added or removed
             setInterval(function() {
                 var videos = document.querySelectorAll('video');
-                videos.forEach(mockVideoElement);
+                if (videos.length === 0 && window.activeVideoElement) {
+                    console.log('[Orivo Bridge] Video element removed from DOM, closing player');
+                    window.activeVideoElement = null;
+                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.playerActionHandler) {
+                        window.webkit.messageHandlers.playerActionHandler.postMessage({ action: 'close' });
+                    }
+                } else if (videos.length > 0) {
+                    videos.forEach(mockVideoElement);
+                }
             }, 500);
             
             // Inject styles to hide raw video and force transparency on player overlay containers
             document.addEventListener('DOMContentLoaded', function() {
                 var style = document.createElement('style');
-                style.innerHTML = 'video { opacity: 0 !important; background: transparent !important; } .player, .player-video, .player-video video, .video-player { background: transparent !important; background-color: transparent !important; }';
+                style.innerHTML = 'video { opacity: 0 !important; background: transparent !important; } .player, .player-video, .player-video video, .video-player, .player-box, .player-box__video, .player-box__body, .lampa-player, #player { background: transparent !important; background-color: transparent !important; }';
                 document.head.appendChild(style);
             });
         })();
