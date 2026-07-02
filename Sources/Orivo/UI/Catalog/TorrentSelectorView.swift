@@ -139,6 +139,20 @@ public struct TorrentSelectorView: View {
                                                 Text(tor.formattedSize)
                                                     .font(.system(size: 11, weight: .medium))
                                                     .foregroundColor(.white.opacity(0.6))
+                                                
+                                                if tor.magnetUri != nil {
+                                                    HStack(spacing: 3) {
+                                                        Image(systemName: "magnet")
+                                                            .font(.system(size: 9))
+                                                        Text("Magnet")
+                                                            .font(.system(size: 9, weight: .bold))
+                                                    }
+                                                    .foregroundColor(.pink)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                                    .background(Color.pink.opacity(0.15))
+                                                    .cornerRadius(4)
+                                                }
                                             }
                                         }
                                         
@@ -380,7 +394,12 @@ public struct TorrentSelectorView: View {
             } catch {
                 await MainActor.run {
                     isLoadingFiles = false
-                    self.errorMessage = "Не удалось добавить торрент: \(error.localizedDescription)"
+                    let desc = error.localizedDescription
+                    if desc.contains("connection was lost") || desc.contains("соединение разорвано") || desc.contains("Network connection lost") {
+                        self.errorMessage = "Соединение разорвано. Возможно, сайт раздачи заблокирован вашим провайдером или требует VPN. Попробуйте выбрать раздачу со значком Magnet (они подключаются без скачивания файлов с сайта) или смените сеть."
+                    } else {
+                        self.errorMessage = "Не удалось добавить торрент: \(desc)"
+                    }
                 }
                 LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: TorrServer add failed: \(error.localizedDescription)", isError: true)
             }
