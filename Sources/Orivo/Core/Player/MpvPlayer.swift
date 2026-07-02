@@ -55,6 +55,12 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
             mpv_set_option_string(handle, "vo", ptr)
         }
         
+        // Flip video vertically because OpenGL has inverted Y axis compared to Core Animation layers
+        let vf = "vflip"
+        _ = vf.withCString { ptr in
+            mpv_set_option_string(handle, "vf", ptr)
+        }
+        
         // Request internal logs from mpv at info level
         mpv_request_log_messages(handle, "info")
         
@@ -191,6 +197,14 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         guard let handle = handle else { return }
         var vol = Double(volume)
         mpv_set_property(handle, "volume", MPV_FORMAT_DOUBLE, &vol)
+    }
+    
+    public func cycleSubtitles() {
+        execute(command: ["cycle", "sub"])
+    }
+    
+    public func cycleAudio() {
+        execute(command: ["cycle", "audio"])
     }
     
     private func observeProperty(name: String, format: mpv_format) {

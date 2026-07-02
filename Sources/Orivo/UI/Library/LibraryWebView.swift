@@ -210,7 +210,7 @@ public struct LibraryWebView: NSViewRepresentable {
                 }
                 
                 DispatchQueue.main.async {
-                    PlayerWindowController.shared.play(url: urlString, title: title)
+                    AppStateManager.shared.play(url: urlString, title: title)
                 }
             }
         }

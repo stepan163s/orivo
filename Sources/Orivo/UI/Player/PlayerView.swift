@@ -130,6 +130,44 @@ public struct PlayerView: View {
                                 .accentColor(.blue)
                                 
                                 Spacer()
+                                
+                                // Cycle Audio Track
+                                Button(action: {
+                                    player.cycleAudio()
+                                    showOverlayTemporarily()
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "waveform")
+                                            .font(.system(size: 14))
+                                        Text("Аудио")
+                                            .font(.system(size: 13, weight: .medium))
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.15))
+                                    .cornerRadius(6)
+                                    .foregroundColor(.white)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                // Cycle Subtitle Track
+                                Button(action: {
+                                    player.cycleSubtitles()
+                                    showOverlayTemporarily()
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "captions.bubble.fill")
+                                            .font(.system(size: 14))
+                                        Text("Субтитры")
+                                            .font(.system(size: 13, weight: .medium))
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.15))
+                                    .cornerRadius(6)
+                                    .foregroundColor(.white)
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
                         .padding(.all, 16)

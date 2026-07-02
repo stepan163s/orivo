@@ -98,7 +98,7 @@ struct OrivoApp: App {
         .windowResizability(.contentSize)
         
         Window("Library", id: "LibraryWindow") {
-            LibraryWebView()
+            LibraryWindowView()
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 1024, minHeight: 700)
         }
@@ -123,6 +123,25 @@ struct OrivoApp: App {
                 }
             }
             .animation(.easeInOut(duration: 0.35), value: showSettings)
+        }
+    }
+}
+
+struct LibraryWindowView: View {
+    @StateObject private var appState = AppStateManager.shared
+    
+    var body: some View {
+        ZStack {
+            LibraryWebView()
+                .ignoresSafeArea()
+            
+            if let player = appState.activePlayer {
+                PlayerView(player: player, title: appState.activePlayerTitle, onClose: {
+                    appState.closePlayer()
+                })
+                .transition(.opacity)
+                .ignoresSafeArea()
+            }
         }
     }
 }
