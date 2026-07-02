@@ -230,6 +230,9 @@ public struct MainCatalogView: View {
         .sheet(item: $selectedMedia) { media in
             MovieDetailView(media: media)
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseCatalogSheets"))) { _ in
+            selectedMedia = nil
+        }
         .task {
             await loadFeedData()
         }

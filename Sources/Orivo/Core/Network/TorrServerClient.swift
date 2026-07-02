@@ -89,12 +89,15 @@ public struct TorrServerStatusResponse: Codable {
 public final class TorrServerClient: Sendable {
     public static let shared = TorrServerClient()
     
-    private let baseURL = "http://127.0.0.1:8090"
-    
-    private init() {}
+    private func getBaseURL() async -> String {
+        return await MainActor.run {
+            SettingsManager.shared.settings.torrserverHost
+        }
+    }
     
     private func post<T: Codable>(endpoint: String, request: TorrServerRequest) async throws -> T {
-        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+        let base = await getBaseURL()
+        guard let url = URL(string: "\(base)\(endpoint)") else {
             throw URLError(.badURL)
         }
         
@@ -125,10 +128,12 @@ public final class TorrServerClient: Sendable {
         return try await post(endpoint: "/torrent/action", request: req)
     }
     
+    @MainActor
     public func getPlayURL(hash: String, fileIndex: Int, filename: String) -> String {
+        let base = SettingsManager.shared.settings.torrserverHost
         guard let escapedFilename = filename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
-            return "\(baseURL)/stream/?link=\(hash)&index=\(fileIndex)&play"
+            return "\(base)/stream/?link=\(hash)&index=\(fileIndex)&play"
         }
-        return "\(baseURL)/stream/\(escapedFilename)?link=\(hash)&index=\(fileIndex)&play"
+        return "\(base)/stream/\(escapedFilename)?link=\(hash)&index=\(fileIndex)&play"
     }
 }

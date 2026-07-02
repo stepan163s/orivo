@@ -9,7 +9,11 @@ public struct SettingsView: View {
     @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
     
     @State private var showingAdvanced = false
+    @State private var showingParserSettings = false
     @State private var selectedLogServiceId: String? = nil
+    
+    @State private var indexers: [JackettIndexer] = []
+    @State private var isLoadingIndexers = false
     
     public init(showSettings: Binding<Bool>) {
         self._showSettings = showSettings
@@ -19,6 +23,8 @@ public struct SettingsView: View {
         if let serviceId = selectedLogServiceId {
             let name = serviceManager.services.first(where: { $0.id == serviceId })?.name ?? "Service"
             return "\(name) Log"
+        } else if showingParserSettings {
+            return loc.currentLanguage == "ru" ? "Парсер и Jackett" : "Parser & Jackett"
         } else if showingAdvanced {
             return loc.tr("advanced")
         } else {
@@ -34,13 +40,19 @@ public struct SettingsView: View {
             Divider()
                 .background(OrivoTheme.borderDefault)
             
-            // Content Pane
             ZStack {
                 if let serviceId = selectedLogServiceId {
                     LogConsoleView(serviceId: serviceId, activeLogServiceId: $selectedLogServiceId)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 14)
                         .transition(.move(edge: .trailing))
+                } else if showingParserSettings {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        parserSettingsView
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 14)
+                    }
+                    .transition(.move(edge: .trailing))
                 } else if showingAdvanced {
                     ScrollView(.vertical, showsIndicators: false) {
                         advancedView
@@ -62,6 +74,7 @@ public struct SettingsView: View {
         .frame(width: 340, height: 400)
         .background(OrivoTheme.bgWindow)
         .animation(.easeInOut(duration: 0.25), value: showingAdvanced)
+        .animation(.easeInOut(duration: 0.25), value: showingParserSettings)
         .animation(.easeInOut(duration: 0.25), value: selectedLogServiceId)
     }
     
@@ -168,6 +181,21 @@ public struct SettingsView: View {
             .font(.system(size: 13))
             .padding(.top, 2)
             
+            // Parser Settings Navigation row
+            Button(action: { showingParserSettings = true }) {
+                HStack {
+                    Text(loc.currentLanguage == "ru" ? "Источники и Парсер (API)" : "Sources & Parser (API)")
+                        .foregroundColor(OrivoTheme.textSecondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10))
+                        .foregroundColor(OrivoTheme.textTertiary)
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            .font(.system(size: 13))
+            .padding(.top, 2)
+            
             Divider()
                 .background(OrivoTheme.borderDefault)
             
@@ -178,6 +206,7 @@ public struct SettingsView: View {
                     .foregroundColor(OrivoTheme.textTertiary)
                 
                 ForEach(serviceManager.services) { service in
+                    let status = serviceManager.statuses[service.id] ?? .stopped
                     HStack {
                         Button(action: { openServiceWebUI(serviceId: service.id) }) {
                             HStack(spacing: 4) {
@@ -192,10 +221,11 @@ public struct SettingsView: View {
                         
                         Spacer()
                         
-                        Text(loc.tr("installed"))
-                            .foregroundColor(OrivoTheme.textTertiary)
+                        Text(loc.tr(status.rawValue.lowercased()))
+                            .foregroundColor(status.isRunning ? .green : OrivoTheme.textTertiary)
                     }
                     .font(.system(size: 13))
+                    .padding(.vertical, 1)
                 }
             }
             
@@ -261,9 +291,147 @@ public struct SettingsView: View {
         }
     }
     
+    private var parserSettingsView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // TorrServer Settings
+            VStack(alignment: .leading, spacing: 6) {
+                Text(loc.currentLanguage == "ru" ? "НАСТРОЙКИ TORRSERVER" : "TORRSERVER SETTINGS")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(OrivoTheme.textTertiary)
+                
+                Toggle(loc.currentLanguage == "ru" ? "Использовать TorrServer" : "Use TorrServer", isOn: Binding(
+                    get: { settingsManager.settings.useTorrServer },
+                    set: { settingsManager.updateSetting(\.useTorrServer, value: $0) }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                .font(.system(size: 13))
+                
+                if settingsManager.settings.useTorrServer {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Адрес TorrServer" : "TorrServer Host URL")
+                            .font(.system(size: 11))
+                            .foregroundColor(OrivoTheme.textSecondary)
+                        
+                        TextField("http://127.0.0.1:8090", text: Binding(
+                            get: { settingsManager.settings.torrserverHost },
+                            set: { settingsManager.updateSetting(\.torrserverHost, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    .padding(.leading, 18)
+                }
+            }
+            
+            Divider()
+                .background(OrivoTheme.borderDefault)
+            
+            // Jackett Settings
+            VStack(alignment: .leading, spacing: 6) {
+                Text(loc.currentLanguage == "ru" ? "НАСТРОЙКИ JACKETT" : "JACKETT SETTINGS")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(OrivoTheme.textTertiary)
+                
+                Toggle(loc.currentLanguage == "ru" ? "Использовать Jackett" : "Use Jackett", isOn: Binding(
+                    get: { settingsManager.settings.useJackett },
+                    set: { settingsManager.updateSetting(\.useJackett, value: $0) }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                .font(.system(size: 13))
+                
+                if settingsManager.settings.useJackett {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Адрес Jackett" : "Jackett Host URL")
+                            .font(.system(size: 11))
+                            .foregroundColor(OrivoTheme.textSecondary)
+                        
+                        TextField("http://127.0.0.1:9117", text: Binding(
+                            get: { settingsManager.settings.jackettHost },
+                            set: { settingsManager.updateSetting(\.jackettHost, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    .padding(.leading, 18)
+                }
+            }
+            
+            Divider()
+                .background(OrivoTheme.borderDefault)
+            
+            // Active Indexers via API
+            VStack(alignment: .leading, spacing: 8) {
+                Text(loc.currentLanguage == "ru" ? "АКТИВНЫЕ ИНДЕКСАТОРЫ JACKETT" : "ACTIVE JACKETT INDEXERS")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(OrivoTheme.textTertiary)
+                
+                if isLoadingIndexers {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                } else if indexers.isEmpty {
+                    Text(loc.currentLanguage == "ru" ? "Индексаторы не найдены." : "No indexers found.")
+                        .font(.system(size: 11))
+                        .foregroundColor(OrivoTheme.textSecondary)
+                } else {
+                    ForEach(indexers) { indexer in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill((indexer.configured ?? false) ? Color.green : Color.gray)
+                                .frame(width: 6, height: 6)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(indexer.name ?? "Без названия")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(OrivoTheme.textPrimary)
+                                
+                                if let desc = indexer.description, !desc.isEmpty {
+                                    Text(desc)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(OrivoTheme.textSecondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            Text((indexer.configured ?? false) ? (loc.currentLanguage == "ru" ? "Активен" : "Active") : (loc.currentLanguage == "ru" ? "Не активен" : "Inactive"))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor((indexer.configured ?? false) ? Color.green : OrivoTheme.textTertiary)
+                        }
+                        .padding(6)
+                        .background(Color.white.opacity(0.03))
+                        .cornerRadius(4)
+                    }
+                }
+            }
+        }
+        .task {
+            loadIndexers()
+        }
+    }
+    
+    private func loadIndexers() {
+        isLoadingIndexers = true
+        Task {
+            do {
+                self.indexers = try await JackettClient.shared.fetchIndexers()
+            } catch {
+                print("Failed to load indexers: \(error.localizedDescription)")
+            }
+            isLoadingIndexers = false
+        }
+    }
+    
     private func handleBackAction() {
         if selectedLogServiceId != nil {
             selectedLogServiceId = nil
+        } else if showingParserSettings {
+            showingParserSettings = false
         } else if showingAdvanced {
             showingAdvanced = false
         } else {
@@ -283,7 +451,6 @@ public struct SettingsView: View {
             NSWorkspace.shared.open(url)
         }
     }
-
     
     private func getLocalIPAddress() -> String {
         var address: String = "127.0.0.1"

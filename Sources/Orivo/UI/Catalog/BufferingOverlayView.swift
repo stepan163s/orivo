@@ -175,6 +175,9 @@ public struct BufferingOverlayView: View {
         let playURL = TorrServerClient.shared.getPlayURL(hash: hash, fileIndex: fileIndex, filename: filename)
         
         DispatchQueue.main.async {
+            // Post notification to dismiss parent sheets first so player isn't covered
+            NotificationCenter.default.post(name: NSNotification.Name("CloseCatalogSheets"), object: nil)
+            
             // Launch native full-screen PlayerView
             AppStateManager.shared.play(url: playURL, title: title)
             // Close buffer overlay sheet

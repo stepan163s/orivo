@@ -65,7 +65,11 @@ public struct JackettResult: Codable, Identifiable, Hashable {
 public final class JackettClient: Sendable {
     public static let shared = JackettClient()
     
-    private let baseURL = "http://127.0.0.1:9117"
+    private func getBaseURL() async -> String {
+        return await MainActor.run {
+            SettingsManager.shared.settings.jackettHost
+        }
+    }
     
     private init() {}
     
@@ -97,7 +101,8 @@ public final class JackettClient: Sendable {
             throw NSError(domain: "JackettClient", code: 1, userInfo: [NSLocalizedDescriptionKey: "Jackett API Key not found. Please verify Jackett is installed."])
         }
         
-        var urlComponents = URLComponents(string: "\(baseURL)/api/v2.0/indexers/all/results")
+        let base = await getBaseURL()
+        var urlComponents = URLComponents(string: "\(base)/api/v2.0/indexers/all/results")
         urlComponents?.queryItems = [
             URLQueryItem(name: "apikey", value: apiKey),
             URLQueryItem(name: "Query", value: query)
@@ -116,5 +121,38 @@ public final class JackettClient: Sendable {
         let decoder = JSONDecoder()
         let result = try decoder.decode(JackettResponse.self, from: data)
         return result.results
+    }
+    
+    public func fetchIndexers() async throws -> [JackettIndexer] {
+        let apiKey = getJackettAPIKey()
+        guard !apiKey.isEmpty else { return [] }
+        let base = await getBaseURL()
+        guard let url = URL(string: "\(base)/api/v2.0/indexers") else { return [] }
+        var urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        urlComponents?.queryItems = [URLQueryItem(name: "apikey", value: apiKey)]
+        guard let targetURL = urlComponents?.url else { return [] }
+        
+        let (data, response) = try await URLSession.shared.data(from: targetURL)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            return []
+        }
+        
+        let decoder = JSONDecoder()
+        return (try? decoder.decode([JackettIndexer].self, from: data)) ?? []
+    }
+}
+
+public struct JackettIndexer: Codable, Identifiable, Hashable, Sendable {
+    public var id: String { idString ?? UUID().uuidString }
+    public let idString: String?
+    public let name: String?
+    public let configured: Bool?
+    public let description: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case idString = "id"
+        case name
+        case configured
+        case description
     }
 }

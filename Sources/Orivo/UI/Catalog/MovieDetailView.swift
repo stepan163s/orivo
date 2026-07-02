@@ -303,6 +303,10 @@ public struct MovieDetailView: View {
                 }
             )
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseCatalogSheets"))) { _ in
+            activeSearchQuery = nil
+            dismiss()
+        }
         .task {
             await loadDetails()
         }

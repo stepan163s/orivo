@@ -68,6 +68,48 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var openLibraryOnLaunch: Bool
     public var quitOnClose: Bool
     public var language: String
+    public var torrserverHost: String
+    public var jackettHost: String
+    public var useTorrServer: Bool
+    public var useJackett: Bool
+    
+    public init(
+        launchAtLogin: Bool,
+        player: String,
+        theme: String,
+        openLibraryOnLaunch: Bool,
+        quitOnClose: Bool,
+        language: String,
+        torrserverHost: String = "http://127.0.0.1:8090",
+        jackettHost: String = "http://127.0.0.1:9117",
+        useTorrServer: Bool = true,
+        useJackett: Bool = true
+    ) {
+        self.launchAtLogin = launchAtLogin
+        self.player = player
+        self.theme = theme
+        self.openLibraryOnLaunch = openLibraryOnLaunch
+        self.quitOnClose = quitOnClose
+        self.language = language
+        self.torrserverHost = torrserverHost
+        self.jackettHost = jackettHost
+        self.useTorrServer = useTorrServer
+        self.useJackett = useJackett
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        self.player = try container.decodeIfPresent(String.self, forKey: .player) ?? "IINA"
+        self.theme = try container.decodeIfPresent(String.self, forKey: .theme) ?? "system"
+        self.openLibraryOnLaunch = try container.decodeIfPresent(Bool.self, forKey: .openLibraryOnLaunch) ?? true
+        self.quitOnClose = try container.decodeIfPresent(Bool.self, forKey: .quitOnClose) ?? false
+        self.language = try container.decodeIfPresent(String.self, forKey: .language) ?? "en"
+        self.torrserverHost = try container.decodeIfPresent(String.self, forKey: .torrserverHost) ?? "http://127.0.0.1:8090"
+        self.jackettHost = try container.decodeIfPresent(String.self, forKey: .jackettHost) ?? "http://127.0.0.1:9117"
+        self.useTorrServer = try container.decodeIfPresent(Bool.self, forKey: .useTorrServer) ?? true
+        self.useJackett = try container.decodeIfPresent(Bool.self, forKey: .useJackett) ?? true
+    }
     
     public static let defaultSettings = AppSettings(
         launchAtLogin: false,
@@ -75,7 +117,11 @@ public struct AppSettings: Codable, Hashable, Sendable {
         theme: "system",
         openLibraryOnLaunch: true,
         quitOnClose: false,
-        language: "en"
+        language: "en",
+        torrserverHost: "http://127.0.0.1:8090",
+        jackettHost: "http://127.0.0.1:9117",
+        useTorrServer: true,
+        useJackett: true
     )
 }
 
