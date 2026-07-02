@@ -2,6 +2,35 @@ import Foundation
 import Cmpv
 import AppKit
 
+public struct MpvTrack: Identifiable, Hashable, Sendable {
+    public var id: Int { trackId }
+    public let trackId: Int
+    public let type: String // "audio", "sub", "video"
+    public let lang: String?
+    public let title: String?
+    public let isSelected: Bool
+    
+    public var displayName: String {
+        var parts: [String] = []
+        if let title = title, !title.isEmpty {
+            parts.append(title)
+        }
+        if let lang = lang, !lang.isEmpty {
+            parts.append("[\(lang.uppercased())]")
+        }
+        if parts.isEmpty {
+            if type == "audio" {
+                return "Аудиодорожка \(trackId)"
+            } else if type == "sub" {
+                return "Субтитры \(trackId)"
+            } else {
+                return "Дорожка \(trackId)"
+            }
+        }
+        return parts.joined(separator: " ")
+    }
+}
+
 public class MpvPlayer: NSObject, @unchecked Sendable {
     private var handle: OpaquePointer?
     private var eventThread: Thread?
@@ -250,6 +279,58 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     
     public func cycleAudio() {
         execute(command: ["cycle", "audio"])
+    }
+    
+    public func getTracks(type: String) -> [MpvTrack] {
+        guard let handle = handle else { return [] }
+        var count: Int64 = 0
+        let status = mpv_get_property(handle, "track-list/count", MPV_FORMAT_INT64, &count)
+        guard status >= 0 else { return [] }
+        
+        var tracks: [MpvTrack] = []
+        for i in 0..<Int(count) {
+            guard let typeCStr = mpv_get_property_string(handle, "track-list/\(i)/type") else { continue }
+            let trackType = String(cString: typeCStr)
+            mpv_free(typeCStr)
+            
+            guard trackType == type else { continue }
+            
+            var trackId: Int64 = 0
+            mpv_get_property(handle, "track-list/\(i)/id", MPV_FORMAT_INT64, &trackId)
+            
+            var lang: String? = nil
+            if let langCStr = mpv_get_property_string(handle, "track-list/\(i)/lang") {
+                lang = String(cString: langCStr)
+                mpv_free(langCStr)
+            }
+            
+            var title: String? = nil
+            if let titleCStr = mpv_get_property_string(handle, "track-list/\(i)/title") {
+                title = String(cString: titleCStr)
+                mpv_free(titleCStr)
+            }
+            
+            var selected: Int32 = 0
+            mpv_get_property(handle, "track-list/\(i)/selected", MPV_FORMAT_FLAG, &selected)
+            
+            tracks.append(MpvTrack(
+                trackId: Int(trackId),
+                type: trackType,
+                lang: lang,
+                title: title,
+                isSelected: selected != 0
+            ))
+        }
+        return tracks
+    }
+    
+    public func selectTrack(type: String, id: Int?) {
+        guard let handle = handle else { return }
+        let propName = type == "audio" ? "aid" : "sid"
+        let valStr = id != nil ? "\(id!)" : "no"
+        _ = valStr.withCString { valPtr in
+            mpv_set_property_string(handle, propName, valPtr)
+        }
     }
     
     private func observeProperty(name: String, format: mpv_format) {

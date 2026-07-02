@@ -131,11 +131,28 @@ public struct PlayerView: View {
                                 
                                 Spacer()
                                 
-                                // Cycle Audio Track
-                                Button(action: {
-                                    player.cycleAudio()
-                                    showOverlayTemporarily()
-                                }) {
+                                // Audio Track Menu Picker
+                                Menu {
+                                    let audioTracks = player.getTracks(type: "audio")
+                                    if audioTracks.isEmpty {
+                                        Text("Нет доступных дорожек")
+                                    } else {
+                                        ForEach(audioTracks, id: \.self) { track in
+                                            Button(action: {
+                                                player.selectTrack(type: "audio", id: track.trackId)
+                                                showOverlayTemporarily()
+                                            }) {
+                                                HStack {
+                                                    if track.isSelected {
+                                                        Text("✓  \(track.displayName)")
+                                                    } else {
+                                                        Text("      \(track.displayName)")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } label: {
                                     HStack(spacing: 6) {
                                         Image(systemName: "waveform")
                                             .font(.system(size: 14))
@@ -150,11 +167,42 @@ public struct PlayerView: View {
                                 }
                                 .buttonStyle(PlainButtonStyle())
                                 
-                                // Cycle Subtitle Track
-                                Button(action: {
-                                    player.cycleSubtitles()
-                                    showOverlayTemporarily()
-                                }) {
+                                // Subtitle Track Menu Picker
+                                Menu {
+                                    let subtitleTracks = player.getTracks(type: "sub")
+                                    
+                                    Button(action: {
+                                        player.selectTrack(type: "sub", id: nil)
+                                        showOverlayTemporarily()
+                                    }) {
+                                        HStack {
+                                            if !subtitleTracks.contains(where: { $0.isSelected }) {
+                                                Text("✓  Выключить")
+                                            } else {
+                                                Text("      Выключить")
+                                            }
+                                        }
+                                    }
+                                    
+                                    if !subtitleTracks.isEmpty {
+                                        Divider()
+                                        
+                                        ForEach(subtitleTracks, id: \.self) { track in
+                                            Button(action: {
+                                                player.selectTrack(type: "sub", id: track.trackId)
+                                                showOverlayTemporarily()
+                                            }) {
+                                                HStack {
+                                                    if track.isSelected {
+                                                        Text("✓  \(track.displayName)")
+                                                    } else {
+                                                        Text("      \(track.displayName)")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } label: {
                                     HStack(spacing: 6) {
                                         Image(systemName: "captions.bubble.fill")
                                             .font(.system(size: 14))
