@@ -239,6 +239,27 @@ public final class TMDBClient: Sendable {
         return response.results
     }
     
+    public func fetchTrendingToday() async throws -> [TMDBMedia] {
+        let response: TMDBPageResponse<TMDBMedia> = try await fetch(endpoint: "/trending/movie/day")
+        return response.results
+    }
+    
+    public func fetchTopRatedMovies() async throws -> [TMDBMedia] {
+        let response: TMDBPageResponse<TMDBMedia> = try await fetch(endpoint: "/movie/top_rated")
+        return response.results
+    }
+    
+    public func fetchTopRatedTVShows() async throws -> [TMDBMedia] {
+        let response: TMDBPageResponse<TMDBMedia> = try await fetch(endpoint: "/tv/top_rated")
+        return response.results
+    }
+    
+    public func fetchMoviesByGenre(id: Int) async throws -> [TMDBMedia] {
+        let queryItems = [URLQueryItem(name: "with_genres", value: "\(id)")]
+        let response: TMDBPageResponse<TMDBMedia> = try await fetch(endpoint: "/discover/movie", queryItems: queryItems)
+        return response.results
+    }
+    
     public func fetchMovieDetails(id: Int) async throws -> TMDBMediaDetail {
         let query = [URLQueryItem(name: "append_to_response", value: "credits")]
         return try await fetch(endpoint: "/movie/\(id)", queryItems: query)

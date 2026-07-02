@@ -36,6 +36,19 @@ public struct MainCatalogView: View {
     @State private var popularMovies: [TMDBMedia] = []
     @State private var popularTVShows: [TMDBMedia] = []
     
+    // Additional feeds
+    @State private var trendingTodayMovies: [TMDBMedia] = []
+    @State private var topRatedMovies: [TMDBMedia] = []
+    @State private var topRatedTVShows: [TMDBMedia] = []
+    
+    // Genre feeds
+    @State private var comedyMovies: [TMDBMedia] = []
+    @State private var thrillerMovies: [TMDBMedia] = []
+    @State private var scifiMovies: [TMDBMedia] = []
+    @State private var familyMovies: [TMDBMedia] = []
+    @State private var historyMovies: [TMDBMedia] = []
+    @State private var crimeMovies: [TMDBMedia] = []
+    
     @State private var selectedMedia: TMDBMedia? = nil
     @State private var isLoading: Bool = false
     @State private var errorMessage: String? = nil
@@ -147,13 +160,72 @@ public struct MainCatalogView: View {
                                     }
                                 }
                                 
-                                RankSection(title: "Топ-10 фильмов на Orivo", items: trendingMovies) { media in
-                                    selectedMedia = media
+                                // Top 10 giant overlay list
+                                if !trendingMovies.isEmpty {
+                                    RankSection(title: "Топ-10 за неделю", items: trendingMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                    .padding(.top, 10)
                                 }
-                                .padding(.top, 10)
                                 
-                                HorizontalSection(title: "Сериалы в тренде", items: trendingTVShows) { media in
-                                    selectedMedia = media
+                                if !trendingTodayMovies.isEmpty {
+                                    HorizontalSection(title: "Сейчас смотрят", items: trendingTodayMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !trendingTVShows.isEmpty {
+                                    HorizontalSection(title: "Сериалы в тренде", items: trendingTVShows) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !topRatedMovies.isEmpty {
+                                    HorizontalSection(title: "Топ фильмов", items: topRatedMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !topRatedTVShows.isEmpty {
+                                    HorizontalSection(title: "Топ сериалов", items: topRatedTVShows) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !comedyMovies.isEmpty {
+                                    HorizontalSection(title: "Комедии", items: comedyMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !thrillerMovies.isEmpty {
+                                    HorizontalSection(title: "Триллеры", items: thrillerMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !scifiMovies.isEmpty {
+                                    HorizontalSection(title: "Фантастика", items: scifiMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !familyMovies.isEmpty {
+                                    HorizontalSection(title: "Семейные фильмы", items: familyMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !historyMovies.isEmpty {
+                                    HorizontalSection(title: "Исторические", items: historyMovies) { media in
+                                        selectedMedia = media
+                                    }
+                                }
+                                
+                                if !crimeMovies.isEmpty {
+                                    HorizontalSection(title: "Криминал", items: crimeMovies) { media in
+                                        selectedMedia = media
+                                    }
                                 }
                             }
                             .padding(.bottom, 32)
@@ -426,10 +498,49 @@ public struct MainCatalogView: View {
             async let popMovies = TMDBClient.shared.fetchPopularMovies()
             async let popTV = TMDBClient.shared.fetchPopularTVShows()
             
-            self.trendingMovies = try await trendMovies
-            self.trendingTVShows = try await trendTV
-            self.popularMovies = try await popMovies
-            self.popularTVShows = try await popTV
+            async let trendToday = TMDBClient.shared.fetchTrendingToday()
+            async let topMovies = TMDBClient.shared.fetchTopRatedMovies()
+            async let topTV = TMDBClient.shared.fetchTopRatedTVShows()
+            
+            async let comedy = TMDBClient.shared.fetchMoviesByGenre(id: 35)
+            async let thriller = TMDBClient.shared.fetchMoviesByGenre(id: 53)
+            async let scifi = TMDBClient.shared.fetchMoviesByGenre(id: 878)
+            async let family = TMDBClient.shared.fetchMoviesByGenre(id: 10751)
+            async let history = TMDBClient.shared.fetchMoviesByGenre(id: 36)
+            async let crime = TMDBClient.shared.fetchMoviesByGenre(id: 80)
+            
+            let loadedTrendMovies = try await trendMovies
+            let loadedTrendTV = try await trendTV
+            let loadedPopMovies = try await popMovies
+            let loadedPopTV = try await popTV
+            
+            let loadedTrendToday = try await trendToday
+            let loadedTopMovies = try await topMovies
+            let loadedTopTV = try await topTV
+            
+            let loadedComedy = try await comedy
+            let loadedThriller = try await thriller
+            let loadedScifi = try await scifi
+            let loadedFamily = try await family
+            let loadedHistory = try await history
+            let loadedCrime = try await crime
+            
+            // Assign results to states
+            self.trendingMovies = loadedTrendMovies
+            self.trendingTVShows = loadedTrendTV
+            self.popularMovies = loadedPopMovies
+            self.popularTVShows = loadedPopTV
+            
+            self.trendingTodayMovies = loadedTrendToday
+            self.topRatedMovies = loadedTopMovies
+            self.topRatedTVShows = loadedTopTV
+            
+            self.comedyMovies = loadedComedy
+            self.thrillerMovies = loadedThriller
+            self.scifiMovies = loadedScifi
+            self.familyMovies = loadedFamily
+            self.historyMovies = loadedHistory
+            self.crimeMovies = loadedCrime
         } catch {
             self.errorMessage = error.localizedDescription
         }
