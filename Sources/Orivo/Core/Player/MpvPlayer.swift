@@ -7,8 +7,12 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     private var eventThread: Thread?
     private var isRunning = false
     
+    // Render API context
+    nonisolated(unsafe) private var renderContext: OpaquePointer?
+    
     public var onPlaybackProgress: ((Double, Double) -> Void)? // currentTime, totalTime
     public var onPlaybackStateChanged: ((Bool) -> Void)? // isPlaying
+    public var onRenderUpdate: (() -> Void)?
     
     private let eventLoopSemaphore = DispatchSemaphore(value: 0)
     
@@ -68,18 +72,90 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     }
     
     public func destroy() {
-        guard let handle = self.handle else { return }
         self.isRunning = false
         
         // Wait for the event thread to exit safely before destroying the handle
         _ = eventLoopSemaphore.wait(timeout: .now() + 0.5)
         
-        mpv_terminate_destroy(handle)
-        self.handle = nil
+        if let renderContext = renderContext {
+            mpv_render_context_free(renderContext)
+            self.renderContext = nil
+        }
+        
+        if let handle = handle {
+            mpv_terminate_destroy(handle)
+            self.handle = nil
+        }
     }
     
     public func getHandle() -> OpaquePointer? {
         return handle
+    }
+    
+    public func setupRenderContext(glContext: NSOpenGLContext) {
+        guard let handle = handle else { return }
+        if renderContext != nil { return }
+        
+        glContext.makeCurrentContext()
+        
+        // C-compatible function pointer for OpenGL dynamic loading
+        let getProcAddress: @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> UnsafeMutableRawPointer? = { _, name in
+            guard let name = name else { return nil }
+            return dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
+        }
+        
+        var glParams = mpv_opengl_init_params(
+            get_proc_address: getProcAddress,
+            get_proc_address_ctx: nil
+        )
+        
+        withUnsafeMutablePointer(to: &glParams) { glParamsPtr in
+            var apiName = "opengl".cString(using: .utf8)!
+            apiName.withUnsafeMutableBufferPointer { apiNameBuffer in
+                var params: [mpv_render_param] = [
+                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: apiNameBuffer.baseAddress),
+                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: glParamsPtr),
+                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                ]
+                
+                let status = mpv_render_context_create(&self.renderContext, handle, &params)
+                if status < 0 {
+                    let errString = String(cString: mpv_error_string(status))
+                    LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: Failed to create render context: \(errString)", isError: true)
+                } else {
+                    LogManager.shared.log(serviceId: "system", text: "MpvPlayer successfully initialized render context")
+                    
+                    // Set update callback to trigger redraws when new video frames arrive
+                    let updateCallback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { ctx in
+                        guard let ctx = ctx else { return }
+                        let player = Unmanaged<MpvPlayer>.fromOpaque(ctx).takeUnretainedValue()
+                        player.onRenderUpdate?()
+                    }
+                    
+                    let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+                    mpv_render_context_set_update_callback(self.renderContext, updateCallback, selfPtr)
+                }
+            }
+        }
+    }
+    
+    public func render(fbo: Int32, width: Int32, height: Int32) {
+        guard let renderContext = renderContext else { return }
+        
+        var openglFbo = mpv_opengl_fbo(fbo: fbo, w: width, h: height, internal_format: 0)
+        
+        withUnsafeMutablePointer(to: &openglFbo) { fboPtr in
+            var apiName = "opengl".cString(using: .utf8)!
+            apiName.withUnsafeMutableBufferPointer { apiNameBuffer in
+                var renderParams: [mpv_render_param] = [
+                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: apiNameBuffer.baseAddress),
+                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: fboPtr),
+                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                ]
+                
+                mpv_render_context_render(renderContext, &renderParams)
+            }
+        }
     }
     
     public func play(url: String) {

@@ -11,7 +11,6 @@ private let GL_FRAMEBUFFER_BINDING: UInt32 = 0x8CA6
 public class MpvVideoView: NSView {
     private var glContext: NSOpenGLContext?
     private var pixelFormat: NSOpenGLPixelFormat?
-    nonisolated(unsafe) private var renderContext: OpaquePointer?
     private var player: MpvPlayer?
     nonisolated(unsafe) private var displayLink: CVDisplayLink?
     private var isConfigured = false
@@ -19,6 +18,12 @@ public class MpvVideoView: NSView {
     public func setPlayer(_ player: MpvPlayer) {
         self.player = player
         setupGL()
+        
+        player.onRenderUpdate = { [weak self] in
+            DispatchQueue.main.async {
+                self?.needsDisplay = true
+            }
+        }
     }
     
     public override func viewDidMoveToWindow() {
@@ -26,17 +31,7 @@ public class MpvVideoView: NSView {
         if window != nil {
             setupDisplayLink()
         } else {
-            // View is leaving the window hierarchy - clean up rendering resources immediately.
-            // This MUST happen before MpvPlayer.destroy() is called on the main handle,
-            // otherwise libmpv will crash with SIGABRT due to dangling client render contexts.
-            if let link = displayLink {
-                CVDisplayLinkStop(link)
-                self.displayLink = nil
-            }
-            if let renderContext = renderContext {
-                mpv_render_context_free(renderContext)
-                self.renderContext = nil
-            }
+            stopDisplayLinkInternal()
         }
     }
     
@@ -69,52 +64,9 @@ public class MpvVideoView: NSView {
         // Make it current
         glContext.makeCurrentContext()
         
-        // Setup libmpv render API context
-        setupMpvRender()
-    }
-    
-    private func setupMpvRender() {
-        guard let player = player, let mpvHandle = player.getHandle() else { return }
-        
-        // C-compatible function pointer for OpenGL dynamic loading
-        let getProcAddress: @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> UnsafeMutableRawPointer? = { _, name in
-            guard let name = name else { return nil }
-            return dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
-        }
-        
-        var glParams = mpv_opengl_init_params(
-            get_proc_address: getProcAddress,
-            get_proc_address_ctx: nil
-        )
-        
-        // Swift requires using withUnsafeMutablePointer or direct address-of
-        withUnsafeMutablePointer(to: &glParams) { glParamsPtr in
-            var apiName = "opengl".cString(using: .utf8)!
-            apiName.withUnsafeMutableBufferPointer { apiNameBuffer in
-                var params: [mpv_render_param] = [
-                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: apiNameBuffer.baseAddress),
-                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: glParamsPtr),
-                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
-                ]
-                
-                let status = mpv_render_context_create(&self.renderContext, mpvHandle, &params)
-                if status < 0 {
-                    let errString = String(cString: mpv_error_string(status))
-                    LogManager.shared.log(serviceId: "system", text: "MpvVideoView error: Failed to create mpv render context: \(errString)", isError: true)
-                } else {
-                    LogManager.shared.log(serviceId: "system", text: "MpvVideoView successfully initialized mpv_render_context")
-                    
-                    // Set update callback to trigger redraws when new video frames arrive
-                    let updateCallback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { ctx in
-                        guard let ctx = ctx else { return }
-                        let view = Unmanaged<MpvVideoView>.fromOpaque(ctx).takeUnretainedValue()
-                        view.triggerRedraw()
-                    }
-                    
-                    let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-                    mpv_render_context_set_update_callback(self.renderContext, updateCallback, selfPtr)
-                }
-            }
+        // Let the player setup its rendering context with our OpenGL context
+        if let player = player {
+            player.setupRenderContext(glContext: glContext)
         }
     }
     
@@ -125,7 +77,7 @@ public class MpvVideoView: NSView {
     }
     
     public override func draw(_ dirtyRect: NSRect) {
-        guard let glContext = glContext, let renderContext = renderContext else {
+        guard let glContext = glContext, let player = player else {
             super.draw(dirtyRect)
             return
         }
@@ -141,20 +93,8 @@ public class MpvVideoView: NSView {
         let width = Int32(backingSize.width)
         let height = Int32(backingSize.height)
         
-        var fbo = mpv_opengl_fbo(fbo: currentFbo, w: width, h: height, internal_format: 0)
-        
-        withUnsafeMutablePointer(to: &fbo) { fboPtr in
-            var apiName = "opengl".cString(using: .utf8)!
-            apiName.withUnsafeMutableBufferPointer { apiNameBuffer in
-                var renderParams: [mpv_render_param] = [
-                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: apiNameBuffer.baseAddress),
-                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: fboPtr),
-                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
-                ]
-                
-                mpv_render_context_render(renderContext, &renderParams)
-            }
-        }
+        // Tell player to render the frame into our active FBO
+        player.render(fbo: currentFbo, width: width, height: height)
         
         glContext.flushBuffer()
     }
@@ -177,12 +117,16 @@ public class MpvVideoView: NSView {
         }
     }
     
+    private func stopDisplayLinkInternal() {
+        if let link = displayLink {
+            CVDisplayLinkStop(link)
+            self.displayLink = nil
+        }
+    }
+    
     deinit {
         if let link = displayLink {
             CVDisplayLinkStop(link)
-        }
-        if let renderContext = renderContext {
-            mpv_render_context_free(renderContext)
         }
     }
 }
