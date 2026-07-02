@@ -190,6 +190,7 @@ struct LibraryWindowView: View {
     @StateObject private var appState = AppStateManager.shared
     @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
     @Environment(\.openWindow) private var openWindow
+    @State private var showSettingsSheet = false
     
     var body: some View {
         ZStack {
@@ -197,8 +198,42 @@ struct LibraryWindowView: View {
                 MainCatalogView()
                     .ignoresSafeArea()
             } else {
-                LibraryWebView()
-                    .ignoresSafeArea()
+                ZStack(alignment: .topTrailing) {
+                    LibraryWebView()
+                        .ignoresSafeArea()
+                    
+                    // Floating Settings Gear to allow switching interface modes or accessing local server configs
+                    Button(action: {
+                        showSettingsSheet = true
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .padding(.trailing, 16)
+                    .padding(.top, 16)
+                }
+                .sheet(isPresented: $showSettingsSheet) {
+                    VStack(spacing: 0) {
+                        HStack {
+                            Spacer()
+                            Button("Закрыть") {
+                                showSettingsSheet = false
+                            }
+                            .buttonStyle(.bordered)
+                            .padding([.top, .trailing], 16)
+                        }
+                        SettingsView(showSettings: $showSettingsSheet)
+                            .frame(minWidth: 800, minHeight: 520)
+                    }
+                    .background(OrivoTheme.bgWindow)
+                    .preferredColorScheme(.dark)
+                }
             }
             
             if let player = appState.activePlayer {
