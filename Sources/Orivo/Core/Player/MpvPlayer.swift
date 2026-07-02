@@ -93,13 +93,20 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
             return
         }
         
-        // On macOS, the "wid" option takes the raw pointer address to the NSView.
+        // Ensure the view is layer-backed
+        nsView.wantsLayer = true
+        guard let layer = nsView.layer else {
+            LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: NSView has no CALayer", isError: true)
+            return
+        }
+        
+        // On macOS, the "wid" option takes the raw pointer address to the CALayer.
         // MUST be set before mpv_initialize() to prevent mpv from creating a fallback standalone window.
-        var viewAddress = Int(bitPattern: Unmanaged.passUnretained(nsView).toOpaque())
-        let status = mpv_set_option(handle, "wid", MPV_FORMAT_INT64, &viewAddress)
+        var layerAddress = Int(bitPattern: Unmanaged.passUnretained(layer).toOpaque())
+        let status = mpv_set_option(handle, "wid", MPV_FORMAT_INT64, &layerAddress)
         if status < 0 {
             let errString = String(cString: mpv_error_string(status))
-            LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: Failed to set NSView option (wid): \(errString)", isError: true)
+            LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: Failed to set CALayer option (wid): \(errString)", isError: true)
         }
         
         // Start initialization with options fully loaded and wid bound
