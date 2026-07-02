@@ -12,6 +12,7 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     
     private var isInitialized = false
     private var deferredUrl: String?
+    private let eventLoopSemaphore = DispatchSemaphore(value: 0)
     
     public override init() {
         super.init()
@@ -70,15 +71,23 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     }
     
     public func destroy() {
-        isRunning = false
-        if let handle = handle {
-            mpv_terminate_destroy(handle)
-            self.handle = nil
-        }
+        guard let handle = self.handle else { return }
+        self.isRunning = false
+        
+        // Wait for the event thread to exit safely before destroying the handle
+        _ = eventLoopSemaphore.wait(timeout: .now() + 0.5)
+        
+        mpv_terminate_destroy(handle)
+        self.handle = nil
     }
     
+    @MainActor
     public func attach(to nsView: NSView) {
         guard let handle = handle else { return }
+        guard nsView.window != nil else {
+            LogManager.shared.log(serviceId: "system", text: "MpvPlayer: Deferring attach because NSView is not in a window yet")
+            return
+        }
         if isInitialized {
             LogManager.shared.log(serviceId: "system", text: "MpvPlayer: Already attached and initialized")
             return
@@ -185,6 +194,9 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     
     private func startEventLoop() {
         eventThread = Thread { [weak self] in
+            defer {
+                self?.eventLoopSemaphore.signal()
+            }
             guard let self = self else { return }
             var duration: Double = 0.0
             var timePos: Double = 0.0
