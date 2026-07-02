@@ -11,11 +11,21 @@ public final class ProcessSupervisor: @unchecked Sendable {
     
     public func launch(service: Service, binaryPath: String) throws {
         try queue.sync(flags: .barrier) {
-            // Check if already running
+            // Check if already running in supervisor
             if let existing = processes[service.id], existing.isRunning {
                 LogManager.shared.log(serviceId: service.id, text: "Service is already running.")
                 return
             }
+            
+            // Forcibly kill any running processes with the same binary name to clean up orphaned instances from previous crashes
+            let killTask = Process()
+            killTask.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+            killTask.arguments = ["-x", service.binaryName]
+            try? killTask.run()
+            killTask.waitUntilExit()
+            
+            // Give the OS a fraction of a second to release the bound sockets
+            Thread.sleep(forTimeInterval: 0.1)
             
             LogManager.shared.log(serviceId: service.id, text: "Launching process from binary: \(binaryPath)")
             
