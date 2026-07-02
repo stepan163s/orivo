@@ -119,18 +119,30 @@ public final class TorrServerClient: Sendable {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("close", forHTTPHeaderField: "Connection") // Bypasses idle socket keep-alive timeout race condition
         
         let encoder = JSONEncoder()
         urlRequest.httpBody = try encoder.encode(request)
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw URLError(.badServerResponse)
+        var lastError: Error?
+        for attempt in 1...3 {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: urlRequest)
+                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                let decoder = JSONDecoder()
+                return try decoder.decode(T.self, from: data)
+            } catch {
+                lastError = error
+                LogManager.shared.log(serviceId: "system", text: "TorrServer API POST failed (attempt \(attempt)/3): \(error.localizedDescription)", isError: true)
+                if attempt < 3 {
+                    // Quick sleep before retrying on a fresh TCP socket
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+            }
         }
-        
-        let decoder = JSONDecoder()
-        return try decoder.decode(T.self, from: data)
+        throw lastError ?? URLError(.unknown)
     }
     
     public func addTorrent(link: String, title: String) async throws -> TorrServerAddResponse {
