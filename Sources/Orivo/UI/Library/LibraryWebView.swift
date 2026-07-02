@@ -178,10 +178,23 @@ public struct LibraryWebView: NSViewRepresentable {
                     configurable: true
                 });
                 
+                var firstProgressReceived = false;
+                
                 video.updateProgressFromNative = function(current, total) {
                     updatingFromNative = true;
                     mockCurrentTime = current;
                     mockDuration = total;
+                    
+                    if (!firstProgressReceived && total > 0) {
+                        firstProgressReceived = true;
+                        video.dispatchEvent(new Event('durationchange'));
+                        video.dispatchEvent(new Event('loadedmetadata'));
+                        video.dispatchEvent(new Event('loadeddata'));
+                        video.dispatchEvent(new Event('canplay'));
+                        video.dispatchEvent(new Event('canplaythrough'));
+                        video.dispatchEvent(new Event('playing'));
+                    }
+                    
                     video.dispatchEvent(new Event('timeupdate'));
                     updatingFromNative = false;
                 };
@@ -266,7 +279,7 @@ public struct LibraryWebView: NSViewRepresentable {
             // Inject styles to hide raw video and force transparency on player overlay containers when active
             document.addEventListener('DOMContentLoaded', function() {
                 var style = document.createElement('style');
-                style.innerHTML = 'video { opacity: 0 !important; } html, body { background-color: #141414 !important; } body.orivo-player-open, body.orivo-player-open html, body.orivo-player-open .player, body.orivo-player-open .player-video, body.orivo-player-open .player-video video, body.orivo-player-open .video-player, body.orivo-player-open .player-box, body.orivo-player-open .player-box__video, body.orivo-player-open .player-box__body, body.orivo-player-open .lampa-player, body.orivo-player-open #player { background: transparent !important; background-color: transparent !important; }';
+                style.innerHTML = 'video { opacity: 0 !important; } html, body { background-color: #141414 !important; } body.orivo-player-open, body.orivo-player-open html, body.orivo-player-open .player, body.orivo-player-open .player-video, body.orivo-player-open .player-video video, body.orivo-player-open .video-player, body.orivo-player-open .player-box, body.orivo-player-open .player-box__video, body.orivo-player-open .player-box__body, body.orivo-player-open .lampa-player, body.orivo-player-open #player { background: transparent !important; background-color: transparent !important; } body.orivo-player-open .selectbox__content { background: rgba(20, 20, 20, 0.7) !important; -webkit-backdrop-filter: blur(20px) saturate(180%) !important; backdrop-filter: blur(20px) saturate(180%) !important; border-left: 1px solid rgba(255, 255, 255, 0.1) !important; }';
                 document.head.appendChild(style);
             });
         })();
