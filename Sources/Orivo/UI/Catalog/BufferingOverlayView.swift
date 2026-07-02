@@ -120,6 +120,7 @@ public struct BufferingOverlayView: View {
     }
     
     private func startTimer() {
+        LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: startTimer called for hash \(hash), fileIndex \(fileIndex)")
         // Query status immediately
         queryStatus()
         
@@ -131,6 +132,7 @@ public struct BufferingOverlayView: View {
     }
     
     private func stopTimer() {
+        LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: stopTimer called")
         statusTimer?.invalidate()
         statusTimer = nil
     }
@@ -139,6 +141,7 @@ public struct BufferingOverlayView: View {
         Task {
             do {
                 let statusResponse = try await TorrServerClient.shared.getTorrentStatus(hash: hash)
+                LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: queryStatus - status: \(statusResponse.status ?? -1), progress: \(statusResponse.bufferingProgress), peers: \(statusResponse.active_peers ?? 0)/\(statusResponse.total_peers ?? 0)")
                 
                 // Update stats
                 self.progress = statusResponse.bufferingProgress
@@ -162,17 +165,19 @@ public struct BufferingOverlayView: View {
                 
                 // Fallback: if progress hits 100%, trigger play
                 if statusResponse.bufferingProgress >= 1.0 {
+                    LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: progress is 100%, triggering playback fallback")
                     stopTimer()
                     playVideo()
                 }
             } catch {
-                print("TorrServer buffering status check error: \(error.localizedDescription)")
+                LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: TorrServer buffering status check error: \(error.localizedDescription)", isError: true)
             }
         }
     }
     
     private func playVideo() {
         let playURL = TorrServerClient.shared.getPlayURL(hash: hash, fileIndex: fileIndex, filename: filename)
+        LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: playVideo called. URL: \(playURL)")
         
         DispatchQueue.main.async {
             // Post notification to dismiss parent sheets first so player isn't covered

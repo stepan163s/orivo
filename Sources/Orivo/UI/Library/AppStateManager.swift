@@ -14,6 +14,7 @@ public class AppStateManager: ObservableObject {
     private init() {}
     
     public func play(url: String, title: String) {
+        LogManager.shared.log(serviceId: "system", text: "AppStateManager: play called, URL: \(url), Title: \(title)")
         // Destroy the old player instance if any
         if let player = activePlayer {
             player.destroy()

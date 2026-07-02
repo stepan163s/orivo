@@ -206,6 +206,7 @@ public struct TorrentSelectorView: View {
                         LazyVStack(spacing: 8) {
                             ForEach(resolvedFiles) { file in
                                 Button(action: {
+                                    LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: File selected from picker: \(file.filename), index: \(file.index)")
                                     showFilePicker = false
                                     startBuffering(hash: hash, fileIndex: file.index, filename: file.filename)
                                 }) {
@@ -294,11 +295,13 @@ public struct TorrentSelectorView: View {
     
     private func selectTorrent(_ torrent: JackettResult) {
         guard let link = torrent.link else { return }
+        LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: selectTorrent called for \(torrent.computedTitle)")
         isLoadingFiles = true
         Task {
             do {
                 let addResponse = try await TorrServerClient.shared.addTorrent(link: link, title: torrent.computedTitle)
                 let files = addResponse.files ?? []
+                LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: TorrServer added torrent, hash: \(addResponse.hash), files count: \(files.count)")
                 
                 // Filter out non-video files
                 let videoExtensions = ["mkv", "mp4", "avi", "mov", "ts"]
@@ -306,17 +309,17 @@ public struct TorrentSelectorView: View {
                     let ext = (file.path as NSString).pathExtension.lowercased()
                     return videoExtensions.contains(ext)
                 }
+                LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Filtered \(videoFiles.count) video files")
                 
                 isLoadingFiles = false
                 
                 if videoFiles.isEmpty {
-                    // No videos found, error
                     self.errorMessage = "В раздаче не найдены поддерживаемые видеофайлы."
                 } else if videoFiles.count == 1 {
-                    // Only one video file: auto play!
+                    LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Single video pack, auto play: \(videoFiles[0].filename)")
                     startBuffering(hash: addResponse.hash, fileIndex: videoFiles[0].index, filename: videoFiles[0].filename)
                 } else {
-                    // Multiple files: open select picker
+                    LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Multi-file pack, prompting file picker")
                     self.resolvedFiles = videoFiles
                     self.resolvedHash = addResponse.hash
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
@@ -325,12 +328,13 @@ public struct TorrentSelectorView: View {
                 }
             } catch {
                 isLoadingFiles = false
-                print("Failed to add torrent in TorrServer: \(error.localizedDescription)")
+                LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: TorrServer add failed: \(error.localizedDescription)", isError: true)
             }
         }
     }
     
     private func startBuffering(hash: String, fileIndex: Int, filename: String) {
+        LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: startBuffering called for hash \(hash), index \(fileIndex), file \(filename)")
         self.activeBufferFileIndex = fileIndex
         self.activeBufferFilename = filename
         self.activeBufferHash = BufferHash(hash: hash)

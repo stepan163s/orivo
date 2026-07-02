@@ -120,12 +120,12 @@ public final class TorrServerClient: Sendable {
     
     public func addTorrent(link: String, title: String) async throws -> TorrServerAddResponse {
         let req = TorrServerRequest(action: "add", link: link, title: title, saveToDB: true)
-        return try await post(endpoint: "/torrent/action", request: req)
+        return try await post(endpoint: "/torrents", request: req)
     }
     
     public func getTorrentStatus(hash: String) async throws -> TorrServerStatusResponse {
         let req = TorrServerRequest(action: "get", hash: hash)
-        return try await post(endpoint: "/torrent/action", request: req)
+        return try await post(endpoint: "/torrents", request: req)
     }
     
     @MainActor
