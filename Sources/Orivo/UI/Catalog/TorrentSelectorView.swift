@@ -23,6 +23,7 @@ public struct TorrentSelectorView: View {
     @State private var resolvedFiles: [TorrServerFile] = []
     @State private var resolvedHash: String? = nil
     @State private var isLoadingFiles: Bool = false
+    @State private var loadingFilesText: String = "Загрузка метаданных торрента..."
     @State private var showFilePicker: Bool = false
     
     // Active Buffering states
@@ -245,7 +246,7 @@ public struct TorrentSelectorView: View {
                     .ignoresSafeArea()
                 VStack(spacing: 12) {
                     ProgressView()
-                    Text("Загрузка метаданных торрента...")
+                    Text(loadingFilesText)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.white.opacity(0.7))
                 }
@@ -296,12 +297,59 @@ public struct TorrentSelectorView: View {
     private func selectTorrent(_ torrent: JackettResult) {
         guard let link = torrent.link else { return }
         LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: selectTorrent called for \(torrent.computedTitle)")
+        
+        loadingFilesText = "Загрузка метаданных торрента..."
         isLoadingFiles = true
+        errorMessage = nil
+        
         Task {
             do {
                 let addResponse = try await TorrServerClient.shared.addTorrent(link: link, title: torrent.computedTitle)
-                let files = addResponse.files ?? []
-                LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: TorrServer added torrent, hash: \(addResponse.hash), files count: \(files.count)")
+                let hash = addResponse.hash
+                LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: TorrServer added torrent, hash: \(hash)")
+                
+                var files = addResponse.files ?? []
+                
+                if files.isEmpty {
+                    // Start polling for metadata since TorrServer is fetching it from the DHT swarm
+                    LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Torrent file list is empty. Starting DHT swarm metadata poll...")
+                    
+                    var attempts = 0
+                    let maxAttempts = 30 // Wait up to 30 seconds
+                    
+                    while files.isEmpty && attempts < maxAttempts {
+                        try await Task.sleep(nanoseconds: 1_000_000_000) // Sleep 1s
+                        attempts += 1
+                        
+                        let status = try await TorrServerClient.shared.getTorrentStatus(hash: hash)
+                        let peersCount = status.active_peers ?? 0
+                        LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Polling status: \(status.status ?? -1), peers: \(peersCount), files count: \(status.files?.count ?? 0)")
+                        
+                        // Update loading visual status to user
+                        await MainActor.run {
+                            if status.status == 1 {
+                                loadingFilesText = "Поиск пиров и метаданных (пиры: \(peersCount))..."
+                            } else {
+                                loadingFilesText = "Загрузка файлов торрента..."
+                            }
+                        }
+                        
+                        if let statusFiles = status.files, !statusFiles.isEmpty {
+                            files = statusFiles
+                            break
+                        }
+                    }
+                }
+                
+                isLoadingFiles = false
+                
+                if files.isEmpty {
+                    await MainActor.run {
+                        self.errorMessage = "Не удалось загрузить файлы торрента. Нет доступных пиров."
+                    }
+                    LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Metadata resolution timed out (0 peers)", isError: true)
+                    return
+                }
                 
                 // Filter out non-video files
                 let videoExtensions = ["mkv", "mp4", "avi", "mov", "ts"]
@@ -311,23 +359,28 @@ public struct TorrentSelectorView: View {
                 }
                 LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Filtered \(videoFiles.count) video files")
                 
-                isLoadingFiles = false
-                
                 if videoFiles.isEmpty {
-                    self.errorMessage = "В раздаче не найдены поддерживаемые видеофайлы."
+                    await MainActor.run {
+                        self.errorMessage = "В раздаче не найдены поддерживаемые видеофайлы."
+                    }
                 } else if videoFiles.count == 1 {
                     LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Single video pack, auto play: \(videoFiles[0].filename)")
-                    startBuffering(hash: addResponse.hash, fileIndex: videoFiles[0].index, filename: videoFiles[0].filename)
+                    startBuffering(hash: hash, fileIndex: videoFiles[0].index, filename: videoFiles[0].filename)
                 } else {
                     LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Multi-file pack, prompting file picker")
-                    self.resolvedFiles = videoFiles
-                    self.resolvedHash = addResponse.hash
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        self.showFilePicker = true
+                    await MainActor.run {
+                        self.resolvedFiles = videoFiles
+                        self.resolvedHash = hash
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                            self.showFilePicker = true
+                        }
                     }
                 }
             } catch {
-                isLoadingFiles = false
+                await MainActor.run {
+                    isLoadingFiles = false
+                    self.errorMessage = "Не удалось добавить торрент: \(error.localizedDescription)"
+                }
                 LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: TorrServer add failed: \(error.localizedDescription)", isError: true)
             }
         }

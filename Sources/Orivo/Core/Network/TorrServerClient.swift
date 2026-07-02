@@ -58,6 +58,7 @@ public struct TorrServerStatusResponse: Codable {
     public let download_speed: Double?
     public let active_peers: Int?
     public let total_peers: Int?
+    public let files: [TorrServerFile]?
     
     public var bufferingProgress: Double {
         guard let loaded = loaded_size, let preload = preload_size, preload > 0 else { return 0 }
@@ -76,7 +77,7 @@ public struct TorrServerStatusResponse: Codable {
     }
     
     enum CodingKeys: String, CodingKey {
-        case hash, title, status
+        case hash, title, status, files
         case stat_string = "stat_string"
         case preload_size = "preload_size"
         case loaded_size = "loaded_size"
