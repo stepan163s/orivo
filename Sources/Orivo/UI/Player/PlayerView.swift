@@ -337,6 +337,24 @@ public struct PlayerView: View {
                 .transition(.opacity)
                 .zIndex(10)
             }
+            
+            // Translucent spinner fallback while waiting for player metadata to load
+            if duration == 0.0 && !isTorrServerBuffering {
+                ZStack {
+                    Color.black.opacity(0.85)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        Text("Подготовка видеопотока...")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(9)
+            }
         }
         .background(Color.black)
         .onContinuousHover { _ in
@@ -401,12 +419,18 @@ public struct PlayerView: View {
                     self.bufferingSpeed = status.formattedSpeed
                     self.bufferingPeers = "\(status.active_peers ?? 0) / \(status.total_peers ?? 0)"
                     
-                    if status.status == 3 || status.bufferingProgress >= 1.0 {
-                        // Caching complete, close overlay and resume playback
-                        self.isTorrServerBuffering = false
-                        self.bufferTimer?.invalidate()
-                        self.bufferTimer = nil
+                    let isReady = status.status == 3 || status.bufferingProgress >= 1.0
+                    
+                    if isReady {
+                        // Buffer is complete. Tell mpv to start loading stream & reading headers
                         self.player.play()
+                        
+                        // Wait until mpv actually reads stream headers and gets a valid duration
+                        if self.duration > 0 {
+                            self.isTorrServerBuffering = false
+                            self.bufferTimer?.invalidate()
+                            self.bufferTimer = nil
+                        }
                     }
                 } catch {
                     print("Buffering check query error: \(error.localizedDescription)")

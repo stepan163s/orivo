@@ -197,7 +197,8 @@ public final class ServiceManager: ObservableObject {
                 return
             }
             if let httpResponse = response as? HTTPURLResponse {
-                completion((200...399).contains(httpResponse.statusCode))
+                // If it responds with 404 or 405, it means the server is running and port is occupied.
+                completion((200...399).contains(httpResponse.statusCode) || httpResponse.statusCode == 404 || httpResponse.statusCode == 405)
             } else {
                 completion(false)
             }

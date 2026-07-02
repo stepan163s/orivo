@@ -65,7 +65,9 @@ public final class Watchdog {
             }
             
             if let httpResponse = response as? HTTPURLResponse {
-                let healthy = (200...399).contains(httpResponse.statusCode)
+                // Hitting custom health check endpoints like /echo on TorrServer returns 404 Not Found,
+                // which indicates the server is active, listening, and responsive.
+                let healthy = (200...399).contains(httpResponse.statusCode) || httpResponse.statusCode == 404 || httpResponse.statusCode == 405
                 completion(healthy)
             } else {
                 completion(false)
