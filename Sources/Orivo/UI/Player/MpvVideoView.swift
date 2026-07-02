@@ -3,6 +3,11 @@ import AppKit
 import Cmpv
 import Darwin
 
+@_silgen_name("glGetIntegerv")
+private func glGetIntegerv(_ pname: UInt32, _ params: UnsafeMutablePointer<Int32>)
+
+private let GL_FRAMEBUFFER_BINDING: UInt32 = 0x8CA6
+
 public class MpvVideoView: NSView {
     private var glContext: NSOpenGLContext?
     private var pixelFormat: NSOpenGLPixelFormat?
@@ -21,9 +26,16 @@ public class MpvVideoView: NSView {
         if window != nil {
             setupDisplayLink()
         } else {
+            // View is leaving the window hierarchy - clean up rendering resources immediately.
+            // This MUST happen before MpvPlayer.destroy() is called on the main handle,
+            // otherwise libmpv will crash with SIGABRT due to dangling client render contexts.
             if let link = displayLink {
                 CVDisplayLinkStop(link)
                 self.displayLink = nil
+            }
+            if let renderContext = renderContext {
+                mpv_render_context_free(renderContext)
+                self.renderContext = nil
             }
         }
     }
@@ -120,12 +132,16 @@ public class MpvVideoView: NSView {
         
         glContext.makeCurrentContext()
         
+        // Query the active framebuffer bound by AppKit/CoreAnimation for this view's layer
+        var currentFbo: Int32 = 0
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFbo)
+        
         // Determine backend viewport scale (for Retina displays backing bounds)
         let backingSize = convertToBacking(bounds.size)
         let width = Int32(backingSize.width)
         let height = Int32(backingSize.height)
         
-        var fbo = mpv_opengl_fbo(fbo: 0, w: width, h: height, internal_format: 0)
+        var fbo = mpv_opengl_fbo(fbo: currentFbo, w: width, h: height, internal_format: 0)
         
         withUnsafeMutablePointer(to: &fbo) { fboPtr in
             var apiName = "opengl".cString(using: .utf8)!
