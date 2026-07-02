@@ -55,9 +55,8 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         }
         self.handle = handle
         
-        // Configure options
-        // Disable hardware decoding to prevent NV12 FBO texture corruption on Apple Silicon
-        let hwdec = "no"
+        // Enable VideoToolbox hardware decoding via copy-back to prevent OpenGL NV12 FBO texture corruption
+        let hwdec = "videotoolbox-copy"
         _ = hwdec.withCString { ptr in
             mpv_set_option_string(handle, "hwdec", ptr)
         }
@@ -331,6 +330,15 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         _ = valStr.withCString { valPtr in
             mpv_set_property_string(handle, propName, valPtr)
         }
+    }
+    
+    public func getCurrentTrackId(type: String) -> Int? {
+        guard let handle = handle else { return nil }
+        let propName = type == "audio" ? "aid" : "sid"
+        var val: Int64 = 0
+        let status = mpv_get_property(handle, propName, MPV_FORMAT_INT64, &val)
+        guard status >= 0 && val > 0 else { return nil }
+        return Int(val)
     }
     
     private func observeProperty(name: String, format: mpv_format) {

@@ -13,6 +13,7 @@ public struct PlayerView: View {
     @State private var hideTimer: Timer?
     @State private var isDraggingSlider: Bool = false
     @State private var dragTime: Double = 0.0
+    @State private var trackSelectionVersion: Int = 0
     
     public init(player: MpvPlayer, title: String, onClose: @escaping () -> Void) {
         self.player = player
@@ -134,16 +135,18 @@ public struct PlayerView: View {
                                 // Audio Track Menu Picker
                                 Menu {
                                     let audioTracks = player.getTracks(type: "audio")
+                                    let currentAudioId = player.getCurrentTrackId(type: "audio")
                                     if audioTracks.isEmpty {
                                         Text("Нет доступных дорожек")
                                     } else {
                                         ForEach(audioTracks, id: \.self) { track in
                                             Button(action: {
                                                 player.selectTrack(type: "audio", id: track.trackId)
+                                                trackSelectionVersion += 1
                                                 showOverlayTemporarily()
                                             }) {
                                                 HStack {
-                                                    if track.isSelected {
+                                                    if currentAudioId == track.trackId {
                                                         Text("✓  \(track.displayName)")
                                                     } else {
                                                         Text("      \(track.displayName)")
@@ -166,17 +169,20 @@ public struct PlayerView: View {
                                     .foregroundColor(.white)
                                 }
                                 .buttonStyle(PlainButtonStyle())
+                                .id("audio-\(trackSelectionVersion)")
                                 
                                 // Subtitle Track Menu Picker
                                 Menu {
                                     let subtitleTracks = player.getTracks(type: "sub")
+                                    let currentSubId = player.getCurrentTrackId(type: "sub")
                                     
                                     Button(action: {
                                         player.selectTrack(type: "sub", id: nil)
+                                        trackSelectionVersion += 1
                                         showOverlayTemporarily()
                                     }) {
                                         HStack {
-                                            if !subtitleTracks.contains(where: { $0.isSelected }) {
+                                            if currentSubId == nil {
                                                 Text("✓  Выключить")
                                             } else {
                                                 Text("      Выключить")
@@ -190,10 +196,11 @@ public struct PlayerView: View {
                                         ForEach(subtitleTracks, id: \.self) { track in
                                             Button(action: {
                                                 player.selectTrack(type: "sub", id: track.trackId)
+                                                trackSelectionVersion += 1
                                                 showOverlayTemporarily()
                                             }) {
                                                 HStack {
-                                                    if track.isSelected {
+                                                    if currentSubId == track.trackId {
                                                         Text("✓  \(track.displayName)")
                                                     } else {
                                                         Text("      \(track.displayName)")
@@ -216,6 +223,7 @@ public struct PlayerView: View {
                                     .foregroundColor(.white)
                                 }
                                 .buttonStyle(PlainButtonStyle())
+                                .id("sub-\(trackSelectionVersion)")
                             }
                         }
                         .padding(.all, 16)
