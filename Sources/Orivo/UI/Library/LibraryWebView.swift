@@ -63,6 +63,24 @@ public struct LibraryWebView: NSViewRepresentable {
             
             window.activeVideoElement = null;
             
+            function addClass(className) {
+                document.documentElement.classList.add(className);
+                if (document.body) {
+                    document.body.classList.add(className);
+                } else {
+                    document.addEventListener('DOMContentLoaded', function() {
+                        document.body.classList.add(className);
+                    });
+                }
+            }
+            
+            function removeClass(className) {
+                document.documentElement.classList.remove(className);
+                if (document.body) {
+                    document.body.classList.remove(className);
+                }
+            }
+            
             function mockVideoElement(video) {
                 if (video._isMocked) return;
                 video._isMocked = true;
@@ -72,7 +90,7 @@ public struct LibraryWebView: NSViewRepresentable {
                 console.log('[Orivo Bridge] Mocking video element');
                 
                 // Add active player class to body to trigger transparency stylesheet rules
-                document.body.classList.add('orivo-player-open');
+                addClass('orivo-player-open');
                 
                 // Force transparency on HTML5 video component
                 video.style.opacity = '0';
@@ -267,7 +285,7 @@ public struct LibraryWebView: NSViewRepresentable {
                 if (videos.length === 0 && window.activeVideoElement) {
                     console.log('[Orivo Bridge] Video element removed from DOM, closing player');
                     window.activeVideoElement = null;
-                    document.body.classList.remove('orivo-player-open');
+                    removeClass('orivo-player-open');
                     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.playerActionHandler) {
                         window.webkit.messageHandlers.playerActionHandler.postMessage({ action: 'close' });
                     }
