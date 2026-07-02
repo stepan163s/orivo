@@ -127,27 +127,47 @@ public struct MovieDetailView: View {
                                     .lineSpacing(4)
                                     .padding(.top, 8)
                                 
-                                // Show "Watch Movie" button if not a TV Show
-                                if details.numberOfSeasons == nil {
-                                    Button(action: {
-                                        activeSearchQuery = SearchQuery(text: details.computedTitle)
-                                        activeSearchTitle = details.computedTitle
-                                    }) {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "play.fill")
-                                            Text("Смотреть фильм")
-                                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                // Watch / Bookmark Actions Row
+                                HStack(spacing: 12) {
+                                    if details.numberOfSeasons == nil {
+                                        Button(action: {
+                                            LibraryManager.shared.addToHistory(media: media)
+                                            activeSearchQuery = SearchQuery(text: details.computedTitle)
+                                            activeSearchTitle = details.computedTitle
+                                        }) {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: "play.fill")
+                                                Text("Смотреть фильм")
+                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                            }
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 10)
+                                            .background(Color.blue)
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
                                         }
-                                        .padding(.horizontal, 24)
-                                        .padding(.vertical, 12)
-                                        .background(Color.blue)
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                    
+                                    let isFav = LibraryManager.shared.isFavorite(media: media)
+                                    Button(action: {
+                                        LibraryManager.shared.toggleFavorite(media: media)
+                                    }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: isFav ? "checkmark" : "plus")
+                                                .font(.system(size: 13, weight: .bold))
+                                            Text(isFav ? "В избранном" : "В избранное")
+                                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                        }
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 10)
+                                        .background(Color.white.opacity(0.15))
                                         .foregroundColor(.white)
                                         .cornerRadius(8)
-                                        .shadow(radius: 5)
                                     }
                                     .buttonStyle(PlainButtonStyle())
-                                    .padding(.top, 12)
                                 }
+                                .padding(.top, 12)
                             }
                         }
                         .padding(.horizontal, 24)
@@ -220,6 +240,7 @@ public struct MovieDetailView: View {
                                                 
                                                 // Play Episode Button
                                                 Button(action: {
+                                                    LibraryManager.shared.addToHistory(media: media)
                                                     // Search for Series SxxExx torrents
                                                     let sStr = String(format: "%02d", selectedSeason)
                                                     let eStr = String(format: "%02d", ep.episodeNumber)

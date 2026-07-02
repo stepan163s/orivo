@@ -127,7 +127,9 @@ struct OrivoApp: App {
             LibraryWindowView()
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 1024, minHeight: 700)
+                .ignoresSafeArea()
         }
+        .windowStyle(HiddenTitleBarWindowStyle())
     }
 }
 
