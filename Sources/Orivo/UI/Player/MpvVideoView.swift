@@ -2,18 +2,8 @@ import SwiftUI
 import AppKit
 
 public class MpvVideoView: NSView {
-    private var player: MpvPlayer?
-    
-    public func setPlayer(_ player: MpvPlayer) {
-        self.player = player
-        player.attach(to: self)
-    }
-    
-    public override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil, let player = player {
-            player.attach(to: self)
-        }
+    public override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
     }
 }
 
@@ -23,8 +13,7 @@ public struct MpvVideoViewRepresentable: NSViewRepresentable {
     public func makeNSView(context: Context) -> MpvVideoView {
         let view = MpvVideoView()
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.black.cgColor
-        view.setPlayer(player)
+        view.layer?.backgroundColor = NSColor.clear.cgColor
         return view
     }
     

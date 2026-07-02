@@ -142,7 +142,7 @@ public struct PlayerView: View {
                 .transition(.opacity)
             }
         }
-        .background(Color.black)
+        .background(Color.clear)
         .onContinuousHover { _ in
             showOverlayTemporarily()
         }
