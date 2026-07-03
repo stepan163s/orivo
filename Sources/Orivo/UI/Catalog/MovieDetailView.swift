@@ -24,6 +24,12 @@ public struct MovieDetailView: View {
     @State private var activeSearchTitle: String? = nil
     @State private var activeEpisodeIndex: Int? = nil // Index inside the torrent file list
     
+    // Online Balancers state
+    @State private var showOnlineSelector = false
+    @State private var onlineStreams: [BalancerStream] = []
+    @State private var isLoadingOnline = false
+    @State private var selectedOnlineStream: BalancerStream? = nil
+    
     public var body: some View {
         ZStack {
             // Blurred backdrop background
@@ -137,12 +143,28 @@ public struct MovieDetailView: View {
                                         }) {
                                             HStack(spacing: 8) {
                                                 Image(systemName: "play.fill")
-                                                Text("Смотреть фильм")
+                                                Text("Торренты")
                                                     .font(.system(size: 13, weight: .bold, design: .rounded))
                                             }
                                             .padding(.horizontal, 20)
                                             .padding(.vertical, 10)
                                             .background(Color.blue)
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        
+                                        Button(action: {
+                                            fetchOnlineStreams()
+                                        }) {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: "globe")
+                                                Text("Смотреть онлайн")
+                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                            }
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 10)
+                                            .background(Color.green)
                                             .foregroundColor(.white)
                                             .cornerRadius(8)
                                         }
@@ -313,12 +335,136 @@ public struct MovieDetailView: View {
                 }
                 .padding(.bottom, 40)
             }
+            
+            // Online Stream Selector Panel Overlay
+            if showOnlineSelector, let details = details {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        showOnlineSelector = false
+                    }
+                
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Смотреть Онлайн — \(details.computedTitle)")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Button(action: { showOnlineSelector = false }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 24, height: 24)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    .padding(20)
+                    
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                    
+                    if isLoadingOnline {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    } else if onlineStreams.isEmpty {
+                        Spacer()
+                        VStack(spacing: 8) {
+                            Image(systemName: "globe")
+                                .font(.system(size: 32))
+                                .foregroundColor(.white.opacity(0.3))
+                            Text("Стримы не найдены")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        Spacer()
+                    } else {
+                        HStack(spacing: 0) {
+                            // Left list: Translators
+                            ScrollView {
+                                VStack(spacing: 6) {
+                                    ForEach(onlineStreams) { stream in
+                                        Button(action: {
+                                            selectedOnlineStream = stream
+                                        }) {
+                                            HStack {
+                                                Text(stream.translation)
+                                                    .font(.system(size: 12, weight: .bold))
+                                                    .foregroundColor(selectedOnlineStream?.translation == stream.translation ? .blue : .white)
+                                                Spacer()
+                                                Image(systemName: "chevron.right")
+                                                    .font(.system(size: 10))
+                                                    .foregroundColor(.white.opacity(0.3))
+                                            }
+                                            .padding(10)
+                                            .background(selectedOnlineStream?.translation == stream.translation ? Color.blue.opacity(0.15) : Color.white.opacity(0.04))
+                                            .cornerRadius(6)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                                .padding(12)
+                            }
+                            .frame(width: 220)
+                            
+                            Divider()
+                                .background(Color.white.opacity(0.1))
+                            
+                            // Right list: Qualities
+                            ScrollView {
+                                VStack(spacing: 8) {
+                                    if let selected = selectedOnlineStream {
+                                        ForEach(selected.qualities) { qual in
+                                            Button(action: {
+                                                showOnlineSelector = false
+                                                LogManager.shared.log(serviceId: "system", text: "Playing online stream URL: \(qual.url)")
+                                                LibraryManager.shared.addToHistory(media: media)
+                                                AppStateManager.shared.play(url: qual.url, title: "\(details.computedTitle) [\(qual.quality)]", mediaId: media.id)
+                                            }) {
+                                                HStack {
+                                                    Image(systemName: "play.fill")
+                                                        .foregroundColor(.green)
+                                                    Text(qual.quality)
+                                                        .font(.system(size: 12, weight: .bold))
+                                                        .foregroundColor(.white)
+                                                    Spacer()
+                                                    Text("Запустить")
+                                                        .font(.system(size: 11, weight: .bold))
+                                                        .foregroundColor(.blue)
+                                                }
+                                                .padding(10)
+                                                .background(Color.white.opacity(0.04))
+                                                .cornerRadius(6)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                        }
+                                    } else {
+                                        Text("Выберите озвучку слева")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.white.opacity(0.5))
+                                            .padding(.top, 40)
+                                    }
+                                }
+                                .padding(12)
+                            }
+                        }
+                    }
+                }
+                .frame(width: 500, height: 350)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .cornerRadius(12)
+                .shadow(radius: 15)
+                .transition(.scale)
+            }
         }
         .frame(width: 800, height: 600)
         .sheet(item: $activeSearchQuery) { q in
             TorrentSelectorView(
                 query: q.text,
                 title: activeSearchTitle ?? media.computedTitle,
+                mediaId: media.id,
                 onClose: {
                     activeSearchQuery = nil
                 }
@@ -357,6 +503,32 @@ public struct MovieDetailView: View {
             print("Failed to load TMDB season details: \(error.localizedDescription)")
         }
         isLoadingSeason = false
+    }
+    
+    private func fetchOnlineStreams() {
+        guard let details = details else { return }
+        isLoadingOnline = true
+        showOnlineSelector = true
+        onlineStreams = []
+        selectedOnlineStream = nil
+        
+        Task {
+            do {
+                let streams = try await BalancersClient.shared.fetchRezkaStreams(title: details.computedTitle, year: details.computedReleaseYear)
+                await MainActor.run {
+                    self.onlineStreams = streams
+                    if !streams.isEmpty {
+                        self.selectedOnlineStream = streams[0]
+                    }
+                    self.isLoadingOnline = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoadingOnline = false
+                }
+                print("Failed to fetch online streams: \(error.localizedDescription)")
+            }
+        }
     }
 }
 

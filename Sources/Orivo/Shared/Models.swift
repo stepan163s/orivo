@@ -80,6 +80,27 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var externalJackettHost: String
     public var externalJackettApiKey: String
     
+    // CUB Synchronization settings
+    public var cubToken: String
+    public var cubEmail: String
+    public var cubProfileID: String
+    public var cubMirrorURL: String
+    
+    // TMDB configuration
+    public var tmdbApiKey: String
+    
+    // Rezka configuration
+    public var rezkaMirrorURL: String
+    
+    // Trakt configuration
+    public var traktToken: String
+    public var traktClientID: String
+    public var traktClientSecret: String
+    
+    // Kinorium configuration
+    public var kinoriumToken: String
+    public var kinoriumEmail: String
+    
     public init(
         launchAtLogin: Bool,
         player: String,
@@ -95,7 +116,18 @@ public struct AppSettings: Codable, Hashable, Sendable {
         externalLampaURL: String = "",
         externalTorrServerHost: String = "",
         externalJackettHost: String = "",
-        externalJackettApiKey: String = ""
+        externalJackettApiKey: String = "",
+        cubToken: String = "",
+        cubEmail: String = "",
+        cubProfileID: String = "",
+        cubMirrorURL: String = "",
+        tmdbApiKey: String = "",
+        rezkaMirrorURL: String = "https://rezka.ag",
+        traktToken: String = "",
+        traktClientID: String = "",
+        traktClientSecret: String = "",
+        kinoriumToken: String = "",
+        kinoriumEmail: String = ""
     ) {
         self.launchAtLogin = launchAtLogin
         self.player = player
@@ -112,6 +144,17 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.externalTorrServerHost = externalTorrServerHost
         self.externalJackettHost = externalJackettHost
         self.externalJackettApiKey = externalJackettApiKey
+        self.cubToken = cubToken
+        self.cubEmail = cubEmail
+        self.cubProfileID = cubProfileID
+        self.cubMirrorURL = cubMirrorURL
+        self.tmdbApiKey = tmdbApiKey
+        self.rezkaMirrorURL = rezkaMirrorURL
+        self.traktToken = traktToken
+        self.traktClientID = traktClientID
+        self.traktClientSecret = traktClientSecret
+        self.kinoriumToken = kinoriumToken
+        self.kinoriumEmail = kinoriumEmail
     }
     
     public init(from decoder: Decoder) throws {
@@ -132,6 +175,18 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.externalTorrServerHost = try container.decodeIfPresent(String.self, forKey: .externalTorrServerHost) ?? ""
         self.externalJackettHost = try container.decodeIfPresent(String.self, forKey: .externalJackettHost) ?? ""
         self.externalJackettApiKey = try container.decodeIfPresent(String.self, forKey: .externalJackettApiKey) ?? ""
+        
+        self.cubToken = try container.decodeIfPresent(String.self, forKey: .cubToken) ?? ""
+        self.cubEmail = try container.decodeIfPresent(String.self, forKey: .cubEmail) ?? ""
+        self.cubProfileID = try container.decodeIfPresent(String.self, forKey: .cubProfileID) ?? ""
+        self.cubMirrorURL = try container.decodeIfPresent(String.self, forKey: .cubMirrorURL) ?? ""
+        self.tmdbApiKey = try container.decodeIfPresent(String.self, forKey: .tmdbApiKey) ?? ""
+        self.rezkaMirrorURL = try container.decodeIfPresent(String.self, forKey: .rezkaMirrorURL) ?? "https://rezka.ag"
+        self.traktToken = try container.decodeIfPresent(String.self, forKey: .traktToken) ?? ""
+        self.traktClientID = try container.decodeIfPresent(String.self, forKey: .traktClientID) ?? ""
+        self.traktClientSecret = try container.decodeIfPresent(String.self, forKey: .traktClientSecret) ?? ""
+        self.kinoriumToken = try container.decodeIfPresent(String.self, forKey: .kinoriumToken) ?? ""
+        self.kinoriumEmail = try container.decodeIfPresent(String.self, forKey: .kinoriumEmail) ?? ""
     }
     
     public static let defaultSettings = AppSettings(
@@ -149,7 +204,18 @@ public struct AppSettings: Codable, Hashable, Sendable {
         externalLampaURL: "",
         externalTorrServerHost: "",
         externalJackettHost: "",
-        externalJackettApiKey: ""
+        externalJackettApiKey: "",
+        cubToken: "",
+        cubEmail: "",
+        cubProfileID: "",
+        cubMirrorURL: "",
+        tmdbApiKey: "",
+        rezkaMirrorURL: "https://rezka.ag",
+        traktToken: "",
+        traktClientID: "",
+        traktClientSecret: "",
+        kinoriumToken: "",
+        kinoriumEmail: ""
     )
 }
 

@@ -12,12 +12,21 @@ public struct BufferHash: Identifiable {
 public struct TorrentSelectorView: View {
     let query: String
     let title: String
+    let mediaId: Int?
     let onClose: () -> Void
+    
+    public init(query: String, title: String, mediaId: Int? = nil, onClose: @escaping () -> Void) {
+        self.query = query
+        self.title = title
+        self.mediaId = mediaId
+        self.onClose = onClose
+    }
     
     @State private var torrents: [JackettResult] = []
     @State private var isLoading: Bool = false
     @State private var errorMessage: String? = nil
     @State private var sortBySeeders: Bool = true
+    @State private var selectedCategory: String = "Все"
     
     // File list selection states
     @State private var resolvedFiles: [TorrServerFile] = []
@@ -78,6 +87,28 @@ public struct TorrentSelectorView: View {
                 Divider()
                     .background(Color.white.opacity(0.1))
                 
+                // Category Pills
+                HStack(spacing: 8) {
+                    ForEach(["Все", "4K", "1080p", "720p", "HDR"], id: \.self) { category in
+                        Button(action: {
+                            selectedCategory = category
+                        }) {
+                            Text(category)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(selectedCategory == category ? .white : .white.opacity(0.6))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(selectedCategory == category ? Color.blue : Color.white.opacity(0.08))
+                                .cornerRadius(12)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 10)
+                
                 if isLoading {
                     Spacer()
                     ProgressView()
@@ -114,7 +145,7 @@ public struct TorrentSelectorView: View {
                     // Torrents Grid list
                     ScrollView {
                         LazyVStack(spacing: 10) {
-                            ForEach(torrents) { tor in
+                            ForEach(filteredTorrents) { tor in
                                 Button(action: {
                                     selectTorrent(tor)
                                 }) {
@@ -135,6 +166,35 @@ public struct TorrentSelectorView: View {
                                                     .padding(.vertical, 2)
                                                     .background(Color.blue.opacity(0.15))
                                                     .cornerRadius(4)
+                                                
+                                                let parsed = parseTorrentTitle(tor.computedTitle)
+                                                if let q = parsed.quality {
+                                                    Text(q)
+                                                        .font(.system(size: 9, weight: .bold))
+                                                        .foregroundColor(.white)
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 2)
+                                                        .background(Color.purple.opacity(0.7))
+                                                        .cornerRadius(4)
+                                                }
+                                                if parsed.isHDR {
+                                                    Text("HDR")
+                                                        .font(.system(size: 9, weight: .bold))
+                                                        .foregroundColor(.white)
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 2)
+                                                        .background(Color.orange.opacity(0.8))
+                                                        .cornerRadius(4)
+                                                }
+                                                if let t = parsed.translation {
+                                                    Text(t)
+                                                        .font(.system(size: 9, weight: .bold))
+                                                        .foregroundColor(.white)
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 2)
+                                                        .background(Color.green.opacity(0.7))
+                                                        .cornerRadius(4)
+                                                }
                                                 
                                                 Text(tor.formattedSize)
                                                     .font(.system(size: 11, weight: .medium))
@@ -273,6 +333,7 @@ public struct TorrentSelectorView: View {
                     fileIndex: activeBufferFileIndex,
                     filename: activeBufferFilename,
                     title: title,
+                    mediaId: mediaId,
                     onClose: {
                         activeBufferHash = nil
                     }
@@ -411,5 +472,61 @@ public struct TorrentSelectorView: View {
         self.activeBufferFileIndex = fileIndex
         self.activeBufferFilename = filename
         self.activeBufferHash = BufferHash(hash: hash)
+    }
+    
+    // MARK: - Title Parsing and Filtering Helpers
+    
+    private struct ParsedTorrentInfo {
+        let title: String
+        let quality: String?
+        let isHDR: Bool
+        let translation: String?
+    }
+    
+    private func parseTorrentTitle(_ title: String) -> ParsedTorrentInfo {
+        let lower = title.lowercased()
+        
+        var quality: String? = nil
+        if lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd") {
+            quality = "4K"
+        } else if lower.contains("1080p") || lower.contains("fhd") {
+            quality = "1080p"
+        } else if lower.contains("720p") || lower.contains("hd") {
+            quality = "720p"
+        }
+        
+        let isHDR = lower.contains("hdr") || lower.contains("dovi") || lower.contains("dolby vision")
+        
+        var translation: String? = nil
+        if lower.contains("dub") || lower.contains("дублиров") || lower.contains("полное дублир") {
+            translation = "DUB"
+        } else if lower.contains("mvo") || lower.contains("многоголос") {
+            translation = "MVO"
+        } else if lower.contains("lvo") || lower.contains("одноголос") {
+            translation = "LVO"
+        } else if lower.contains("sub") || lower.contains("субтитр") {
+            translation = "SUB"
+        }
+        
+        return ParsedTorrentInfo(title: title, quality: quality, isHDR: isHDR, translation: translation)
+    }
+    
+    private var filteredTorrents: [JackettResult] {
+        if selectedCategory == "Все" {
+            return torrents
+        }
+        return torrents.filter { tor in
+            let parsed = parseTorrentTitle(tor.computedTitle)
+            if selectedCategory == "4K" {
+                return parsed.quality == "4K"
+            } else if selectedCategory == "1080p" {
+                return parsed.quality == "1080p"
+            } else if selectedCategory == "720p" {
+                return parsed.quality == "720p"
+            } else if selectedCategory == "HDR" {
+                return parsed.isHDR
+            }
+            return true
+        }
     }
 }

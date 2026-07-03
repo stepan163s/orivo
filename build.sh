@@ -9,21 +9,100 @@ APP_DIR="Orivo.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
+FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 
 mkdir -p "$MACOS_DIR"
 mkdir -p "$RESOURCES_DIR"
+mkdir -p "$FRAMEWORKS_DIR"
 
 # Copy binary
 cp ".build/release/Orivo" "$MACOS_DIR/Orivo"
 
-# Copy libmpv framework into the bundle
-FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
-mkdir -p "$FRAMEWORKS_DIR"
-cp "/opt/homebrew/opt/mpv/lib/libmpv.2.dylib" "$FRAMEWORKS_DIR/libmpv.2.dylib"
+MPV_DYLIB="${MPV_DYLIB:-}"
+if [ -z "$MPV_DYLIB" ]; then
+    for candidate in \
+        "/opt/homebrew/opt/mpv/lib/libmpv.2.dylib" \
+        "/usr/local/opt/mpv/lib/libmpv.2.dylib" \
+        "/Applications/IINA.app/Contents/Frameworks/libmpv.2.dylib"; do
+        if [ -f "$candidate" ]; then
+            MPV_DYLIB="$candidate"
+            break
+        fi
+    done
+fi
 
-# Ensure the executable can locate the library inside the Frameworks folder and system Homebrew
+if [ -z "$MPV_DYLIB" ]; then
+    echo "Error: libmpv.2.dylib was not found. Install mpv with Homebrew or set MPV_DYLIB=/path/to/libmpv.2.dylib"
+    exit 1
+fi
+
+# Copy libmpv and its Homebrew dylib dependencies into the bundle
+cp "$MPV_DYLIB" "$FRAMEWORKS_DIR/libmpv.2.dylib"
+chmod u+w "$FRAMEWORKS_DIR/libmpv.2.dylib"
+
+copy_homebrew_dependency() {
+    local dependency="$1"
+    case "$dependency" in
+        /opt/homebrew/*|/usr/local/*)
+            ;;
+        *)
+            return
+            ;;
+    esac
+
+    if [ ! -f "$dependency" ]; then
+        return
+    fi
+
+    local destination="$FRAMEWORKS_DIR/$(basename "$dependency")"
+    if [ ! -f "$destination" ]; then
+        echo "Bundling $(basename "$dependency")"
+        cp "$dependency" "$destination"
+        chmod u+w "$destination"
+        dylib_queue+=("$destination")
+    fi
+}
+
+dylib_queue=("$FRAMEWORKS_DIR/libmpv.2.dylib")
+processed_dylibs=""
+queue_index=0
+
+while [ "$queue_index" -lt "${#dylib_queue[@]}" ]; do
+    dylib="${dylib_queue[$queue_index]}"
+    queue_index=$((queue_index + 1))
+
+    case "$processed_dylibs" in
+        *"|$dylib|"*) continue ;;
+    esac
+    processed_dylibs="$processed_dylibs|$dylib|"
+
+    while IFS= read -r dependency; do
+        copy_homebrew_dependency "$dependency"
+    done < <(otool -L "$dylib" | awk 'NR > 1 { print $1 }')
+done
+
+rewrite_homebrew_dependencies() {
+    local target="$1"
+    while IFS= read -r dependency; do
+        case "$dependency" in
+            /opt/homebrew/*|/usr/local/*)
+                local bundled_dependency="$FRAMEWORKS_DIR/$(basename "$dependency")"
+                if [ -f "$bundled_dependency" ]; then
+                    install_name_tool -change "$dependency" "@rpath/$(basename "$dependency")" "$target" || true
+                fi
+                ;;
+        esac
+    done < <(otool -L "$target" | awk 'NR > 1 { print $1 }')
+}
+
+# Ensure the executable can locate bundled libraries inside the Frameworks folder.
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/Orivo" || true
-install_name_tool -add_rpath "/opt/homebrew/lib" "$MACOS_DIR/Orivo" || true
+
+for dylib in "$FRAMEWORKS_DIR"/*.dylib; do
+    install_name_tool -id "@rpath/$(basename "$dylib")" "$dylib" || true
+    rewrite_homebrew_dependencies "$dylib"
+done
+rewrite_homebrew_dependencies "$MACOS_DIR/Orivo"
 
 # Generate AppIcon.icns if icon.jpg exists
 if [ -f "icon.jpg" ]; then

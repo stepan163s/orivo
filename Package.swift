@@ -24,7 +24,12 @@ let package = Package(
                 .copy("Resources/Lampa")
             ],
             linkerSettings: [
-                .unsafeFlags(["-L/Applications/IINA.app/Contents/Frameworks", "-lmpv.2"])
+                .unsafeFlags([
+                    "-L/opt/homebrew/opt/mpv/lib",
+                    "-L/usr/local/opt/mpv/lib",
+                    "-L/Applications/IINA.app/Contents/Frameworks",
+                    "-lmpv.2"
+                ])
             ]
         )
     ]

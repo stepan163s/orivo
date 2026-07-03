@@ -5,7 +5,17 @@ public struct BufferingOverlayView: View {
     let fileIndex: Int
     let filename: String
     let title: String
+    let mediaId: Int?
     let onClose: () -> Void
+    
+    public init(hash: String, fileIndex: Int, filename: String, title: String, mediaId: Int? = nil, onClose: @escaping () -> Void) {
+        self.hash = hash
+        self.fileIndex = fileIndex
+        self.filename = filename
+        self.title = title
+        self.mediaId = mediaId
+        self.onClose = onClose
+    }
     
     @State private var progress: Double = 0.0
     @State private var speedString: String = "0 КБ/с"
@@ -184,7 +194,7 @@ public struct BufferingOverlayView: View {
             NotificationCenter.default.post(name: NSNotification.Name("CloseCatalogSheets"), object: nil)
             
             // Launch native full-screen PlayerView
-            AppStateManager.shared.play(url: playURL, title: title)
+            AppStateManager.shared.play(url: playURL, title: title, mediaId: mediaId)
             // Close buffer overlay sheet
             onClose()
         }

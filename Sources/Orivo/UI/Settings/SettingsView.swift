@@ -14,6 +14,24 @@ public struct SettingsView: View {
     @State private var showingExternalSettings = false
     @State private var selectedLogServiceId: String? = nil
     
+    // CUB Pairing state
+    @State private var cubPairingCode: String = ""
+    @State private var cubPairingStatusText: String = ""
+    @State private var isPollingCUB = false
+    
+    // Trakt Pairing state
+    @State private var traktPairingCode: String = ""
+    @State private var traktPairingStatusText: String = ""
+    @State private var isPollingTrakt = false
+    
+    // Kinorium state
+    @State private var kinoriumInputEmail = ""
+    @State private var kinoriumInputPassword = ""
+    @State private var kinoriumStatusText = ""
+    @State private var isLoggingInKinorium = false
+    @State private var showingKinoriumLoginSheet = false
+    @State private var kinoriumLoginURL: URL? = nil
+    
     @State private var indexers: [JackettIndexer] = []
     @State private var isLoadingIndexers = false
     
@@ -25,6 +43,7 @@ public struct SettingsView: View {
         case general = "general"
         case parser = "parser"
         case components = "components"
+        case sync = "sync"
         case external = "external"
         
         var id: String { self.rawValue }
@@ -38,6 +57,8 @@ public struct SettingsView: View {
                 return loc.currentLanguage == "ru" ? "Парсер и Jackett" : "Parser & Jackett"
             case .components:
                 return loc.tr("components")
+            case .sync:
+                return loc.currentLanguage == "ru" ? "Синхронизация" : "Synchronization"
             case .external:
                 return loc.currentLanguage == "ru" ? "Внешние сервера" : "External Servers"
             }
@@ -48,6 +69,7 @@ public struct SettingsView: View {
             case .general: return "slider.horizontal.3"
             case .parser: return "network"
             case .components: return "cpu"
+            case .sync: return "arrow.triangle.2.circlepath"
             case .external: return "server.rack"
             }
         }
@@ -61,6 +83,50 @@ public struct SettingsView: View {
             } else {
                 // Original compact settings list for small window dashboard
                 compactSettingsView
+            }
+        }
+        .sheet(isPresented: $showingKinoriumLoginSheet) {
+            if let url = kinoriumLoginURL {
+                KinoriumLoginSheet(url: url) { result in
+                    showingKinoriumLoginSheet = false
+                    
+                    switch result {
+                    case .cookie(let cookiesString, let cookies):
+                        let extractedEmail = cookies.first(where: { 
+                            let name = $0.name.lowercased()
+                            return name.contains("mail") || name.contains("login") || name.contains("user") || name.contains("name")
+                        })?.value ?? "OAuth Profile"
+                        
+                        settingsManager.updateSetting(\.kinoriumToken, value: cookiesString)
+                        settingsManager.updateSetting(\.kinoriumEmail, value: extractedEmail)
+                        settingsManager.saveSettings()
+                        kinoriumStatusText = "Успешно авторизовано!"
+                        
+                    case .deepLink(_, let parameters):
+                        let email = parameters["access_token[email]"] ?? "Apple OAuth Profile"
+                        let token = parameters["access_token[id]"] ?? ""
+                        let secret = parameters["secret"] ?? ""
+                        
+                        kinoriumStatusText = "Завершаем авторизацию через Apple ID..."
+                        isLoggingInKinorium = true
+                        Task {
+                            do {
+                                try await KinoriumClient.shared.authenticateWithApple(accessTokenID: token, email: email, secret: secret)
+                                await MainActor.run {
+                                    self.kinoriumStatusText = "Успешно авторизовано через Apple ID!"
+                                    self.isLoggingInKinorium = false
+                                }
+                            } catch {
+                                await MainActor.run {
+                                    self.kinoriumStatusText = "Ошибка: \(error.localizedDescription)"
+                                    self.isLoggingInKinorium = false
+                                }
+                            }
+                        }
+                    }
+                } onCancel: {
+                    showingKinoriumLoginSheet = false
+                }
             }
         }
     }
@@ -159,6 +225,8 @@ public struct SettingsView: View {
                                 largeParserCategory
                             case .components:
                                 largeComponentsCategory
+                            case .sync:
+                                largeSyncCategory
                             case .external:
                                 largeExternalCategory
                             }
@@ -567,6 +635,487 @@ public struct SettingsView: View {
             }
         }
         .font(.system(size: 13))
+    }
+    
+    // MARK: - Synchronization Category
+    @ViewBuilder
+    private var largeSyncCategory: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Box 1: CUB Sync Settings
+            VStack(alignment: .leading, spacing: 14) {
+                Text(loc.currentLanguage == "ru" ? "Синхронизация CUB (Lampa)" : "CUB (Lampa) Synchronization")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                Text(loc.currentLanguage == "ru" 
+                    ? "Позволяет синхронизировать нативное Избранное и Историю с серверами CUB (или вашим зеркалом)." 
+                    : "Allows synchronizing native Favorites & History with CUB.red servers (or your mirror).")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.6))
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Адрес зеркала CUB (опционально)" : "CUB Mirror URL (Optional)")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        TextField("Например, https://cub.red или https://cub.rip", text: Binding(
+                            get: { settingsManager.settings.cubMirrorURL },
+                            set: { settingsManager.updateSetting(\.cubMirrorURL, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "Токен авторизации CUB" : "CUB Access Token")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        SecureField("Введите токен (или получите по PIN ниже)", text: Binding(
+                            get: { settingsManager.settings.cubToken },
+                            set: { settingsManager.updateSetting(\.cubToken, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(loc.currentLanguage == "ru" ? "ID профиля CUB (опционально)" : "CUB Profile ID (Optional)")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        TextField("Оставьте пустым для профиля по умолчанию", text: Binding(
+                            get: { settingsManager.settings.cubProfileID },
+                            set: { settingsManager.updateSetting(\.cubProfileID, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.1))
+                
+                HStack(spacing: 12) {
+                    Button(action: startCUBPairing) {
+                        HStack {
+                            Image(systemName: "key.fill")
+                            Text(isPollingCUB ? "Ожидание..." : (loc.currentLanguage == "ru" ? "Связать устройство" : "Pair Device"))
+                        }
+                    }
+                    .disabled(isPollingCUB)
+                    
+                    Button(action: {
+                        Task {
+                            await LibraryManager.shared.syncWithCUB()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                            Text(loc.currentLanguage == "ru" ? "Синхронизировать сейчас" : "Sync Now")
+                        }
+                    }
+                    .disabled(settingsManager.settings.cubToken.isEmpty)
+                }
+                
+                if !cubPairingStatusText.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !cubPairingCode.isEmpty {
+                            HStack(spacing: 8) {
+                                Text(loc.currentLanguage == "ru" ? "Код сопряжения:" : "Pairing PIN:")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text(cubPairingCode)
+                                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.yellow)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Color.white.opacity(0.12))
+                                    .cornerRadius(6)
+                            }
+                        }
+                        Text(cubPairingStatusText)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.04))
+                    .cornerRadius(8)
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Box 2: Trakt.tv settings
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text("Синхронизация Trakt.tv")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.4))
+                    Spacer()
+                    if !settingsManager.settings.traktToken.isEmpty {
+                        Text(loc.currentLanguage == "ru" ? "Активен" : "Active")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.15))
+                            .cornerRadius(6)
+                    }
+                }
+                
+                Text(loc.currentLanguage == "ru"
+                    ? "Отмечает просмотренные фильмы и прогресс воспроизведения на Trakt.tv при использовании нативного плеера."
+                    : "Automatically marks watched movies and tracks playback progress on Trakt.tv within Orivo's player.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.6))
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Trakt Client ID:")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        TextField("Получить на trakt.tv/oauth/applications", text: Binding(
+                            get: { settingsManager.settings.traktClientID },
+                            set: { settingsManager.updateSetting(\.traktClientID, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Trakt Client Secret:")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                        SecureField("Client Secret", text: Binding(
+                            get: { settingsManager.settings.traktClientSecret },
+                            set: { settingsManager.updateSetting(\.traktClientSecret, value: $0) }
+                        ))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(size: 12))
+                    }
+                }
+                
+                HStack(spacing: 12) {
+                    Button(action: startTraktPairing) {
+                        HStack {
+                            Image(systemName: "key.fill")
+                            Text(isPollingTrakt ? "Ожидание..." : (loc.currentLanguage == "ru" ? "Связать устройство" : "Pair Device"))
+                        }
+                    }
+                    .disabled(isPollingTrakt)
+                    
+                    if !settingsManager.settings.traktToken.isEmpty {
+                        Button(action: {
+                            settingsManager.updateSetting(\.traktToken, value: "")
+                        }) {
+                            Text(loc.currentLanguage == "ru" ? "Выйти" : "Sign Out")
+                        }
+                    }
+                }
+                
+                if !traktPairingStatusText.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !traktPairingCode.isEmpty {
+                            HStack(spacing: 8) {
+                                Text(loc.currentLanguage == "ru" ? "Код сопряжения:" : "Pairing PIN:")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text(traktPairingCode)
+                                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.yellow)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Color.white.opacity(0.12))
+                                    .cornerRadius(6)
+                            }
+                        }
+                        Text(traktPairingStatusText)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.04))
+                    .cornerRadius(8)
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Box 3: TMDB Key
+            VStack(alignment: .leading, spacing: 12) {
+                Text(loc.currentLanguage == "ru" ? "Ключ TMDB (Каталог)" : "TMDB API Key (Catalog)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                Text(loc.currentLanguage == "ru"
+                    ? "Укажите ваш персональный API-ключ v3 (по умолчанию используется встроенный ключ Orivo)."
+                    : "Specify your custom v3 API key (defaults to Orivo's built-in key).")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.6))
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(loc.currentLanguage == "ru" ? "API-ключ v3 (опционально)" : "API Key v3 (Optional)")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.6))
+                    TextField(loc.currentLanguage == "ru" ? "Введите API-ключ" : "Enter API key", text: Binding(
+                        get: { settingsManager.settings.tmdbApiKey },
+                        set: { settingsManager.updateSetting(\.tmdbApiKey, value: $0) }
+                    ))
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .font(.system(size: 12))
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Box 4: HDRezka Mirror
+            VStack(alignment: .leading, spacing: 12) {
+                Text(loc.currentLanguage == "ru" ? "Зеркало HDRezka (Онлайн фильмы)" : "HDRezka Mirror (Online Movies)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                Text(loc.currentLanguage == "ru"
+                    ? "Если онлайн-фильмы не запускаются или выдают ошибку, пропишите рабочий адрес зеркала HDRezka."
+                    : "If streams fail to search or load, specify a working HDRezka mirror domain.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.6))
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(loc.currentLanguage == "ru" ? "Адрес зеркала (домен)" : "Mirror Domain")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.6))
+                    TextField("https://rezka.ag", text: Binding(
+                        get: { settingsManager.settings.rezkaMirrorURL },
+                        set: { settingsManager.updateSetting(\.rezkaMirrorURL, value: $0) }
+                    ))
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .font(.system(size: 12))
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Box 5: Kinorium integration
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(loc.currentLanguage == "ru" ? "Интеграция Кинориум" : "Kinorium Integration")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.4))
+                    Spacer()
+                    if !settingsManager.settings.kinoriumEmail.isEmpty {
+                        Text(loc.currentLanguage == "ru" ? "Вошли в \(settingsManager.settings.kinoriumEmail)" : "Active (\(settingsManager.settings.kinoriumEmail))")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.15))
+                            .cornerRadius(6)
+                    }
+                }
+                
+                Text(loc.currentLanguage == "ru"
+                    ? "Позволяет импортировать оценки, историю просмотров и списки из вашего профиля на Кинориуме."
+                    : "Allows importing ratings, watch history, and lists from your Kinorium profile.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.6))
+                
+                if settingsManager.settings.kinoriumEmail.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                kinoriumLoginURL = URL(string: "https://api.kinorium.com/api/google/?action=auth")
+                                showingKinoriumLoginSheet = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "g.circle.fill")
+                                    Text(loc.currentLanguage == "ru" ? "Вход через Google" : "Sign in with Google")
+                                }
+                            }
+                            
+                            Button(action: {
+                                kinoriumLoginURL = URL(string: "https://api.kinorium.com/api/apple/?action=auth")
+                                showingKinoriumLoginSheet = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "applelogo")
+                                    Text(loc.currentLanguage == "ru" ? "Вход через Apple" : "Sign in with Apple")
+                                }
+                            }
+                        }
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.1))
+                            .padding(.vertical, 4)
+                        
+                        Text(loc.currentLanguage == "ru" ? "Или по логину и паролю:" : "Or use email and password:")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.4))
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Email:")
+                                .font(.system(size: 11))
+                                .foregroundColor(.white.opacity(0.6))
+                            TextField("example@gmail.com", text: $kinoriumInputEmail)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .font(.system(size: 12))
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(loc.currentLanguage == "ru" ? "Пароль:" : "Password:")
+                                .font(.system(size: 11))
+                                .foregroundColor(.white.opacity(0.6))
+                            SecureField("Password", text: $kinoriumInputPassword)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .font(.system(size: 12))
+                        }
+                        
+                        Button(action: loginToKinorium) {
+                            HStack {
+                                if isLoggingInKinorium {
+                                    ProgressView()
+                                        .scaleEffect(0.6)
+                                        .frame(width: 12, height: 12)
+                                }
+                                Text(loc.currentLanguage == "ru" ? "Войти по Email" : "Log In by Email")
+                            }
+                        }
+                        .disabled(isLoggingInKinorium || kinoriumInputEmail.isEmpty || kinoriumInputPassword.isEmpty)
+                    }
+                } else {
+                    Button(action: {
+                        settingsManager.updateSetting(\.kinoriumToken, value: "")
+                        settingsManager.updateSetting(\.kinoriumEmail, value: "")
+                        kinoriumInputEmail = ""
+                        kinoriumInputPassword = ""
+                        kinoriumStatusText = ""
+                    }) {
+                        Text(loc.currentLanguage == "ru" ? "Выйти" : "Log Out")
+                    }
+                }
+                
+                if !kinoriumStatusText.isEmpty {
+                    Text(kinoriumStatusText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(kinoriumStatusText.contains("Ошибка") || kinoriumStatusText.contains("Failed") ? .red.opacity(0.8) : .white.opacity(0.8))
+                        .padding(8)
+                        .background(Color.white.opacity(0.04))
+                        .cornerRadius(6)
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+        }
+        .font(.system(size: 13))
+    }
+    
+    private func startCUBPairing() {
+        cubPairingCode = ""
+        cubPairingStatusText = "Запрос кода сопряжения..."
+        isPollingCUB = true
+        
+        Task {
+            do {
+                let pairing = try await CUBClient.shared.requestPairingCode()
+                await MainActor.run {
+                    self.cubPairingCode = pairing.user_code
+                    self.cubPairingStatusText = "Перейдите на \(pairing.verification_url) и введите указанный выше код."
+                }
+                
+                var attempts = 0
+                let maxAttempts = 60
+                while isPollingCUB && attempts < maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(pairing.interval * 1_000_000_000))
+                    attempts += 1
+                    
+                    let tokenRes = try await CUBClient.shared.pollPairingStatus(deviceCode: pairing.device_code)
+                    if let token = tokenRes.token, !token.isEmpty {
+                        await MainActor.run {
+                            settingsManager.settings.cubToken = token
+                            settingsManager.saveSettings()
+                            self.cubPairingStatusText = "Устройство успешно связано!"
+                            self.isPollingCUB = false
+                            
+                            Task {
+                                await LibraryManager.shared.syncWithCUB()
+                            }
+                        }
+                        break
+                    } else if tokenRes.error == "expired_token" {
+                        await MainActor.run {
+                            self.cubPairingStatusText = "Срок действия кода истек. Попробуйте еще раз."
+                            self.isPollingCUB = false
+                        }
+                        break
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.cubPairingStatusText = "Ошибка: \(error.localizedDescription)"
+                    self.isPollingCUB = false
+                }
+            }
+        }
+    }
+    
+    private func startTraktPairing() {
+        traktPairingCode = ""
+        traktPairingStatusText = "Запрос кода сопряжения..."
+        isPollingTrakt = true
+        
+        Task {
+            do {
+                let pairing = try await TraktClient.shared.requestPairingCode()
+                await MainActor.run {
+                    self.traktPairingCode = pairing.user_code
+                    self.traktPairingStatusText = "Перейдите на \(pairing.verification_url) и введите указанный выше код."
+                }
+                
+                var attempts = 0
+                let maxAttempts = 60
+                while isPollingTrakt && attempts < maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(pairing.interval * 1_000_000_000))
+                    attempts += 1
+                    
+                    let tokenRes = try await TraktClient.shared.pollPairingStatus(deviceCode: pairing.device_code)
+                    if let token = tokenRes.access_token, !token.isEmpty {
+                        await MainActor.run {
+                            settingsManager.settings.traktToken = token
+                            settingsManager.saveSettings()
+                            self.traktPairingStatusText = "Устройство успешно связано!"
+                            self.isPollingTrakt = false
+                        }
+                        break
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.traktPairingStatusText = "Ошибка: \(error.localizedDescription)"
+                    self.isPollingTrakt = false
+                }
+            }
+        }
+    }
+    
+    private func loginToKinorium() {
+        kinoriumStatusText = "Авторизация..."
+        isLoggingInKinorium = true
+        
+        Task {
+            do {
+                try await KinoriumClient.shared.authenticate(email: kinoriumInputEmail, password: kinoriumInputPassword)
+                await MainActor.run {
+                    self.kinoriumStatusText = "Успешно авторизовано!"
+                    self.isLoggingInKinorium = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.kinoriumStatusText = "Ошибка: \(error.localizedDescription)"
+                    self.isLoggingInKinorium = false
+                }
+            }
+        }
     }
     
     // MARK: - Compact Settings View

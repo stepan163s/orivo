@@ -52,6 +52,9 @@
 2. Откройте скачанный DMG-образ и перетащите иконку **Orivo** в папку **Applications** (Программы).
 3. При первом запуске macOS выдаст стандартное предупреждение о программе, загруженной из сети. Нажмите **Открыть**.
 
+> [!NOTE]
+> Если тестовая сборка не подписана Developer ID и macOS показывает окно **"Apple could not verify Orivo is free of malware"**, это блокировка Gatekeeper, а не ошибка приложения. Для публичных релизов нужен Developer ID certificate и notarization. Для локальной проверки можно удалить quarantine-атрибут: `xattr -dr com.apple.quarantine /Applications/Orivo.app`, затем открыть приложение правым кликом через **Открыть**.
+
 ---
 
 ## Первый запуск

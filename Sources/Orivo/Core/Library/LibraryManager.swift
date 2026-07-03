@@ -32,6 +32,73 @@ public final class LibraryManager: ObservableObject {
            let decoded = try? JSONDecoder().decode([TMDBMedia].self, from: data) {
             self.history = decoded
         }
+        
+        Task {
+            await syncWithCUB()
+        }
+    }
+    
+    public func syncWithCUB() async {
+        let settings = SettingsManager.shared.settings
+        guard !settings.cubToken.isEmpty else { return }
+        
+        LogManager.shared.log(serviceId: "system", text: "LibraryManager: Starting CUB synchronization...")
+        do {
+            let cubBookmarks = try await CUBClient.shared.fetchBookmarks()
+            
+            await MainActor.run {
+                var updated = false
+                for cubItem in cubBookmarks {
+                    if !self.favorites.contains(where: { $0.id == cubItem.id }) {
+                        let media = TMDBMedia(
+                            id: cubItem.id,
+                            title: cubItem.title,
+                            name: cubItem.title,
+                            overview: nil,
+                            posterPath: nil,
+                            backdropPath: nil,
+                            voteAverage: nil,
+                            releaseDate: nil,
+                            firstAirDate: nil,
+                            mediaType: cubItem.type
+                        )
+                        self.favorites.append(media)
+                        updated = true
+                    }
+                }
+                if updated {
+                    self.saveFavorites()
+                }
+            }
+            
+            let cubHistory = try await CUBClient.shared.fetchTimeline()
+            await MainActor.run {
+                var updated = false
+                for cubItem in cubHistory {
+                    if !self.history.contains(where: { $0.id == cubItem.id }) {
+                        let media = TMDBMedia(
+                            id: cubItem.id,
+                            title: "ID \(cubItem.id)",
+                            name: nil,
+                            overview: nil,
+                            posterPath: nil,
+                            backdropPath: nil,
+                            voteAverage: nil,
+                            releaseDate: nil,
+                            firstAirDate: nil,
+                            mediaType: "movie"
+                        )
+                        self.history.append(media)
+                        updated = true
+                    }
+                }
+                if updated {
+                    self.saveHistory()
+                }
+            }
+        } catch {
+            LogManager.shared.log(serviceId: "system", text: "LibraryManager: CUB sync failed: \(error.localizedDescription)", isError: true)
+        }
     }
     
     public func saveFavorites() {

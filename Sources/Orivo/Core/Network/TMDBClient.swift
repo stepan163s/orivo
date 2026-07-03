@@ -197,9 +197,12 @@ public final class TMDBClient: Sendable {
     private init() {}
     
     private func fetch<T: Codable>(endpoint: String, queryItems: [URLQueryItem] = []) async throws -> T {
+        let customKey = await MainActor.run { SettingsManager.shared.settings.tmdbApiKey }
+        let resolvedKey = customKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? apiKey : customKey
+        
         var urlComponents = URLComponents(string: "\(baseURL)\(endpoint)")
         var allQueryItems = [
-            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "api_key", value: resolvedKey),
             URLQueryItem(name: "language", value: language)
         ]
         allQueryItems.append(contentsOf: queryItems)

@@ -7,6 +7,7 @@ public enum CatalogTab: String, CaseIterable, Identifiable {
     case tvShows = "Сериалы"
     case history = "История"
     case favorites = "Избранное"
+    case kinoriumWatchlist = "Буду смотреть"
     case settings = "Настройки"
     
     public var id: String { self.rawValue }
@@ -19,6 +20,7 @@ public enum CatalogTab: String, CaseIterable, Identifiable {
         case .tvShows: return "tv"
         case .history: return "clock"
         case .favorites: return "star"
+        case .kinoriumWatchlist: return "bookmark"
         case .settings: return "gearshape"
         }
     }
@@ -52,9 +54,13 @@ public struct MainCatalogView: View {
     @State private var selectedMedia: TMDBMedia? = nil
     @State private var isLoading: Bool = false
     @State private var errorMessage: String? = nil
+    @State private var kinoriumWatchlist: [KinoriumWatchItem] = []
+    @State private var kinoriumWatchlistError: String? = nil
+    @State private var isLoadingKinoriumWatchlist = false
     
     @StateObject private var library = LibraryManager.shared
     @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
+    @State private var showOrivoAccountAlert = false
     
     public init() {}
     
@@ -85,6 +91,7 @@ public struct MainCatalogView: View {
                     
                     sidebarItem(for: .history)
                     sidebarItem(for: .favorites)
+                    sidebarItem(for: .kinoriumWatchlist)
                 }
                 .padding(.horizontal, 8)
                 .padding(.bottom, 20)
@@ -105,9 +112,7 @@ public struct MainCatalogView: View {
                 
                 // Apple Account - Profile Row
                 Button(action: {
-                    withAnimation {
-                        selectedTab = .settings
-                    }
+                    showOrivoAccountAlert = true
                 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "person.crop.circle.fill")
@@ -118,7 +123,7 @@ public struct MainCatalogView: View {
                             Text("Orivo Account")
                                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                                 .foregroundColor(.white)
-                            Text("Настройки сервера")
+                            Text("Облачные функции (Скоро)")
                                 .font(.system(size: 9))
                                 .foregroundColor(.white.opacity(0.4))
                         }
@@ -333,6 +338,10 @@ public struct MainCatalogView: View {
                         favoritesView
                             .padding(.top, 40)
                         
+                    case .kinoriumWatchlist:
+                        kinoriumWatchlistView
+                            .padding(.top, 40)
+                        
                     case .settings:
                         SettingsView(showSettings: .constant(true))
                             .padding(.top, 40)
@@ -351,6 +360,11 @@ public struct MainCatalogView: View {
         .frame(minWidth: 850, minHeight: 600)
         .sheet(item: $selectedMedia) { media in
             MovieDetailView(media: media)
+        }
+        .alert("Orivo Account", isPresented: $showOrivoAccountAlert) {
+            Button("ОК", role: .cancel) {}
+        } message: {
+            Text("Авторизация для облачных функций Orivo Account будет доступна в будущих обновлениях.")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseCatalogSheets"))) { _ in
             selectedMedia = nil
@@ -489,6 +503,92 @@ public struct MainCatalogView: View {
         }
     }
     
+    @ViewBuilder
+    private var kinoriumWatchlistView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Кинориум: Буду смотреть")
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("Список загружается напрямую через API Кинориума")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.45))
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        Task { await loadKinoriumWatchlist(force: true) }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Обновить")
+                        }
+                        .font(.system(size: 12, weight: .semibold))
+                    }
+                    .disabled(isLoadingKinoriumWatchlist)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                
+                if isLoadingKinoriumWatchlist {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .scaleEffect(1.0)
+                            .padding(.top, 80)
+                        Spacer()
+                    }
+                } else if let kinoriumWatchlistError {
+                    VStack(spacing: 12) {
+                        Spacer().frame(height: 80)
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 42))
+                            .foregroundColor(.orange.opacity(0.75))
+                        Text("Не удалось загрузить список")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                        Text(kinoriumWatchlistError)
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.45))
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 420)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                } else if kinoriumWatchlist.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer().frame(height: 100)
+                        Image(systemName: "bookmark")
+                            .font(.system(size: 48))
+                            .foregroundColor(.white.opacity(0.2))
+                        Text("Список пуст")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.4))
+                        Text("Когда в Кинориуме появятся фильмы в списке «Буду смотреть», они будут отображаться здесь.")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.3))
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 360)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140, maximum: 160), spacing: 16)], spacing: 20) {
+                        ForEach(kinoriumWatchlist) { item in
+                            KinoriumWatchItemCard(item: item)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .task {
+            await loadKinoriumWatchlist(force: false)
+        }
+    }
+    
     private func loadFeedData() async {
         guard trendingMovies.isEmpty else { return }
         isLoading = true
@@ -558,6 +658,20 @@ public struct MainCatalogView: View {
             }
             isSearching = false
         }
+    }
+    
+    private func loadKinoriumWatchlist(force: Bool) async {
+        if !force, !kinoriumWatchlist.isEmpty {
+            return
+        }
+        isLoadingKinoriumWatchlist = true
+        kinoriumWatchlistError = nil
+        do {
+            kinoriumWatchlist = try await KinoriumClient.shared.fetchFutureWatchlist()
+        } catch {
+            kinoriumWatchlistError = error.localizedDescription
+        }
+        isLoadingKinoriumWatchlist = false
     }
 }
 
@@ -752,6 +866,48 @@ struct MovieCard: View {
             }
         }
         .buttonStyle(PlainButtonStyle())
+        .onHover { hover in
+            isHovered = hover
+        }
+    }
+}
+
+struct KinoriumWatchItemCard: View {
+    let item: KinoriumWatchItem
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            CachedAsyncImage(url: item.posterURL) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.white.opacity(0.06))
+                    .overlay(
+                        Image(systemName: "film")
+                            .foregroundColor(.white.opacity(0.2))
+                    )
+            }
+            .frame(width: 130, height: 195)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(radius: isHovered ? 8 : 2)
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+            
+            Text(item.title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .frame(width: 130, alignment: .leading)
+            
+            Text(item.year ?? item.originalTitle ?? "Кинориум")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(1)
+                .frame(width: 130, alignment: .leading)
+        }
         .onHover { hover in
             isHovered = hover
         }
