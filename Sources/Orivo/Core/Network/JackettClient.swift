@@ -76,7 +76,8 @@ public final class JackettClient: Sendable {
             if settings.useExternalServers && !settings.externalJackettHost.isEmpty {
                 return settings.externalJackettHost
             } else {
-                return settings.jackettHost
+                let port = ServiceManager.shared.resolvedJackettPort
+                return "http://127.0.0.1:\(port)"
             }
         }
     }

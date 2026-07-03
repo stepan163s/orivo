@@ -12,24 +12,31 @@ public final class ConfigServer: @unchecked Sendable {
     public func start() {
         guard listener == nil else { return }
         
-        do {
-            listener = try NWListener(using: .tcp, on: 8098)
-            listener?.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    LogManager.shared.log(serviceId: "system", text: "Auto-config server started on port 8098.")
-                case .failed(let error):
-                    LogManager.shared.log(serviceId: "system", text: "Auto-config server failed to start: \(error.localizedDescription)", isError: true)
-                default:
-                    break
+        Task { @MainActor in
+            let port = ServiceManager.shared.resolvedConfigServerPort
+            do {
+                let resolvedPort = NWEndpoint.Port(rawValue: UInt16(port)) ?? 8098
+                let listener = try NWListener(using: .tcp, on: resolvedPort)
+                self.listener = listener
+                
+                listener.stateUpdateHandler = { [weak self] state in
+                    switch state {
+                    case .ready:
+                        LogManager.shared.log(serviceId: "system", text: "Auto-config server started on port \(port).")
+                    case .failed(let error):
+                        LogManager.shared.log(serviceId: "system", text: "Auto-config server failed to start on port \(port): \(error.localizedDescription)", isError: true)
+                        self?.listener = nil
+                    default:
+                        break
+                    }
                 }
+                listener.newConnectionHandler = { [weak self] connection in
+                    self?.handleConnection(connection)
+                }
+                listener.start(queue: self.queue)
+            } catch {
+                LogManager.shared.log(serviceId: "system", text: "Auto-config server init error on port \(port): \(error.localizedDescription)", isError: true)
             }
-            listener?.newConnectionHandler = { [weak self] connection in
-                self?.handleConnection(connection)
-            }
-            listener?.start(queue: queue)
-        } catch {
-            LogManager.shared.log(serviceId: "system", text: "Auto-config server init error: \(error.localizedDescription)", isError: true)
         }
     }
     
@@ -72,25 +79,27 @@ public final class ConfigServer: @unchecked Sendable {
             return
         }
         
-        let settings = await MainActor.run { SettingsManager.shared.settings }
+        let (settings, torrPort, jackettPort) = await MainActor.run {
+            (SettingsManager.shared.settings, ServiceManager.shared.resolvedTorrServerPort, ServiceManager.shared.resolvedJackettPort)
+        }
         
-        // CORS proxy: forward /jackett/* → http://127.0.0.1:9117/* (or external host)
+        // CORS proxy: forward /jackett/* → http://127.0.0.1:resolvedJackettPort/* (or external host)
         if path.hasPrefix("/jackett") {
             let jackettPath = String(path.dropFirst("/jackett".count))
             let upstreamBase = (settings.useExternalServers && !settings.externalJackettHost.isEmpty)
                 ? settings.externalJackettHost
-                : "http://127.0.0.1:9117"
+                : "http://127.0.0.1:\(jackettPort)"
             let jackettURL = upstreamBase + (jackettPath.isEmpty ? "/" : jackettPath)
             proxyToJackett(urlString: jackettURL, connection: connection)
             return
         }
         
-        // CORS proxy: forward /torrserver/* → http://127.0.0.1:8090/* (or external host)
+        // CORS proxy: forward /torrserver/* → http://127.0.0.1:resolvedTorrServerPort/* (or external host)
         if path.hasPrefix("/torrserver") {
             let torrPath = String(path.dropFirst("/torrserver".count))
             let upstreamBase = (settings.useExternalServers && !settings.externalTorrServerHost.isEmpty)
                 ? settings.externalTorrServerHost
-                : "http://127.0.0.1:8090"
+                : "http://127.0.0.1:\(torrPort)"
             let torrURL = upstreamBase + (torrPath.isEmpty ? "/" : torrPath)
             proxyRequest(urlString: torrURL, connection: connection)
             return

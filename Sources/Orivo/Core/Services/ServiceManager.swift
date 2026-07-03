@@ -8,6 +8,11 @@ public final class ServiceManager: ObservableObject {
     @Published var services: [Service] = []
     @Published var statuses: [String: ServiceStatus] = [:]
     
+    @Published public var resolvedTorrServerPort: Int = 8090
+    @Published public var resolvedJackettPort: Int = 9117
+    @Published public var resolvedConfigServerPort: Int = 8098
+    @Published public var resolvedFlareSolverrPort: Int = 8191
+    
     private let appSupportDir: URL
     private let configURL: URL
     public let servicesDir: URL
@@ -21,8 +26,53 @@ public final class ServiceManager: ObservableObject {
         self.servicesDir = appSupportDir.appendingPathComponent("services", isDirectory: true)
         
         setupDirectories()
+        resolveDynamicPorts()
         loadServices()
         observeEvents()
+    }
+    
+    private func isPortBusy(_ port: Int) -> Bool {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return true }
+        defer {
+            close(fd)
+        }
+        
+        var addr = sockaddr_in()
+        addr.sin_len = __uint8_t(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = CFSwapInt16HostToBig(UInt16(port))
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        
+        let rc = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        
+        return rc < 0
+    }
+    
+    private func findFreePort(startingAt port: Int) -> Int {
+        var currentPort = port
+        while isPortBusy(currentPort) {
+            currentPort += 1
+        }
+        return currentPort
+    }
+    
+    private func resolveDynamicPorts() {
+        let rawTorr = 8090
+        let rawJackett = 9117
+        let rawConfig = 8098
+        let rawSolver = 8191
+        
+        self.resolvedTorrServerPort = isPortBusy(rawTorr) ? findFreePort(startingAt: 8091) : rawTorr
+        self.resolvedJackettPort = isPortBusy(rawJackett) ? findFreePort(startingAt: 9118) : rawJackett
+        self.resolvedConfigServerPort = isPortBusy(rawConfig) ? findFreePort(startingAt: 8099) : rawConfig
+        self.resolvedFlareSolverrPort = isPortBusy(rawSolver) ? findFreePort(startingAt: 8192) : rawSolver
+        
+        LogManager.shared.log(serviceId: "system", text: "Port resolution: TorrServer=\(resolvedTorrServerPort), Jackett=\(resolvedJackettPort), ConfigServer=\(resolvedConfigServerPort), FlareSolverr=\(resolvedFlareSolverrPort)")
     }
     
     private func setupDirectories() {
@@ -39,25 +89,15 @@ public final class ServiceManager: ObservableObject {
                 let data = try Data(contentsOf: configURL)
                 var decoded = try JSONDecoder().decode([Service].self, from: data)
                 
-                // Migration: Correct old Jackett command line arguments if present
-                for i in 0..<decoded.count {
-                    if decoded[i].id == "jackett" {
-                        if decoded[i].arguments.contains("--port") || decoded[i].arguments.contains("--NoBrowser") {
-                            LogManager.shared.log(serviceId: "system", text: "Migrating old Jackett arguments to support the latest version.")
-                            decoded[i].arguments = ["--Port", "9117", "--NoUpdates"]
-                        }
-                    }
-                }
-                
-                // Migration: Correct TorrServer port to 8090 and set database path
+                // Dynamically update port configuration for loaded services if collision detected
                 for i in 0..<decoded.count {
                     if decoded[i].id == "torrserver" {
                         let torrDbPath = self.servicesDir.appendingPathComponent("torrserver").path
-                        if decoded[i].arguments.contains("8091") || !decoded[i].arguments.contains("-d") {
-                            LogManager.shared.log(serviceId: "system", text: "Migrating TorrServer port and database path to default 8090.")
-                            decoded[i].arguments = ["-p", "8090", "-d", torrDbPath]
-                            decoded[i].healthEndpoint = "http://127.0.0.1:8090/echo"
-                        }
+                        decoded[i].arguments = ["-p", String(resolvedTorrServerPort), "-d", torrDbPath]
+                        decoded[i].healthEndpoint = "http://127.0.0.1:\(resolvedTorrServerPort)/echo"
+                    } else if decoded[i].id == "jackett" {
+                        decoded[i].arguments = ["--Port", String(resolvedJackettPort), "--NoUpdates"]
+                        decoded[i].healthEndpoint = "http://127.0.0.1:\(resolvedJackettPort)/UI/Dashboard"
                     }
                 }
                 
@@ -84,10 +124,10 @@ public final class ServiceManager: ObservableObject {
             id: "torrserver",
             name: "TorrServer",
             binaryName: "TorrServer",
-            arguments: ["-p", "8090", "-d", torrDbPath],
+            arguments: ["-p", String(resolvedTorrServerPort), "-d", torrDbPath],
             workingDirectory: nil,
             environment: nil,
-            healthEndpoint: "http://127.0.0.1:8090/echo",
+            healthEndpoint: "http://127.0.0.1:\(resolvedTorrServerPort)/echo",
             restartPolicy: .onCrash,
             autoStart: true
         )
@@ -96,10 +136,10 @@ public final class ServiceManager: ObservableObject {
             id: "jackett",
             name: "Jackett",
             binaryName: "jackett",
-            arguments: ["--Port", "9117", "--NoUpdates"],
+            arguments: ["--Port", String(resolvedJackettPort), "--NoUpdates"],
             workingDirectory: nil,
             environment: nil,
-            healthEndpoint: "http://127.0.0.1:9117/UI/Dashboard",
+            healthEndpoint: "http://127.0.0.1:\(resolvedJackettPort)/UI/Dashboard",
             restartPolicy: .onCrash,
             autoStart: true
         )

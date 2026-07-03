@@ -1093,7 +1093,7 @@ public struct SettingsView: View {
     }
     
     private func openServiceWebUI(serviceId: String) {
-        let port = serviceId == "torrserver" ? 8090 : 9117
+        let port = serviceId == "torrserver" ? ServiceManager.shared.resolvedTorrServerPort : ServiceManager.shared.resolvedJackettPort
         if let url = URL(string: "http://127.0.0.1:\(port)/") {
             NSWorkspace.shared.open(url)
         }

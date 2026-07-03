@@ -28,7 +28,7 @@ public struct MovieDetailView: View {
         ZStack {
             // Blurred backdrop background
             if let details = details {
-                AsyncImage(url: details.backdropURL) { image in
+                CachedAsyncImage(url: details.backdropURL) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -74,7 +74,7 @@ public struct MovieDetailView: View {
                         // Main info row
                         HStack(alignment: .top, spacing: 24) {
                             // Poster
-                            AsyncImage(url: details.posterURL) { image in
+                            CachedAsyncImage(url: details.posterURL) { image in
                                 image
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
@@ -212,7 +212,7 @@ public struct MovieDetailView: View {
                                         ForEach(season.episodes) { ep in
                                             HStack(alignment: .top, spacing: 16) {
                                                 // Still Thumbnail
-                                                AsyncImage(url: ep.stillURL) { image in
+                                                CachedAsyncImage(url: ep.stillURL) { image in
                                                     image
                                                         .resizable()
                                                         .aspectRatio(contentMode: .fill)
@@ -278,7 +278,7 @@ public struct MovieDetailView: View {
                                     HStack(spacing: 16) {
                                         ForEach(cast.prefix(12)) { actor in
                                             VStack {
-                                                AsyncImage(url: actor.profileURL) { image in
+                                                CachedAsyncImage(url: actor.profileURL) { image in
                                                     image
                                                         .resizable()
                                                         .aspectRatio(contentMode: .fill)

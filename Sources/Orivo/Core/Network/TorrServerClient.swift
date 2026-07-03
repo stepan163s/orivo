@@ -110,7 +110,8 @@ public final class TorrServerClient: Sendable {
             if settings.useExternalServers && !settings.externalTorrServerHost.isEmpty {
                 return settings.externalTorrServerHost
             } else {
-                return settings.torrserverHost
+                let port = ServiceManager.shared.resolvedTorrServerPort
+                return "http://127.0.0.1:\(port)"
             }
         }
     }

@@ -31,16 +31,19 @@ public struct LibraryWebView: NSViewRepresentable {
         let configuration = WKWebViewConfiguration()
         let settings = SettingsManager.shared.settings
         
+        let configPort = ServiceManager.shared.resolvedConfigServerPort
+        let torrPort = ServiceManager.shared.resolvedTorrServerPort
+        
         let jackettKey = settings.useExternalServers ? settings.externalJackettApiKey : getLocalJackettAPIKey()
         let isExternalLampa = settings.useExternalServers && !settings.externalLampaURL.isEmpty
         
         let jackettProxyBase = isExternalLampa 
-            ? (settings.externalJackettHost.isEmpty ? "http://127.0.0.1:8098/jackett" : settings.externalJackettHost) 
-            : "http://127.0.0.1:8098/jackett"
+            ? (settings.externalJackettHost.isEmpty ? "http://127.0.0.1:\(configPort)/jackett" : settings.externalJackettHost) 
+            : "http://127.0.0.1:\(configPort)/jackett"
             
         let torrserverURL = isExternalLampa 
-            ? (settings.externalTorrServerHost.isEmpty ? "http://127.0.0.1:8090" : settings.externalTorrServerHost) 
-            : "http://127.0.0.1:8098/torrserver"
+            ? (settings.externalTorrServerHost.isEmpty ? "http://127.0.0.1:\(torrPort)" : settings.externalTorrServerHost) 
+            : "http://127.0.0.1:\(configPort)/torrserver"
         
         // 1. Console Log redirection bridge script
         let logBridgeSource = """
@@ -199,9 +202,9 @@ public struct LibraryWebView: NSViewRepresentable {
         let configScript = WKUserScript(source: configSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(configScript)
         
-        // Register console bridge listener
-        configuration.userContentController.add(context.coordinator, name: "logHandler")
-        configuration.userContentController.add(context.coordinator, name: "playerHandler")
+        // Register console bridge listener with weak wrappers to prevent memory leaks
+        configuration.userContentController.add(WeakScriptMessageHandler(delegate: context.coordinator), name: "logHandler")
+        configuration.userContentController.add(WeakScriptMessageHandler(delegate: context.coordinator), name: "playerHandler")
         
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -247,13 +250,19 @@ public struct LibraryWebView: NSViewRepresentable {
                 let settings = SettingsManager.shared.settings
                 var finalUrlString = urlString
                 
+                let configPort = ServiceManager.shared.resolvedConfigServerPort
+                let torrPort = ServiceManager.shared.resolvedTorrServerPort
+                
                 // Rewrite proxied or local TorrServer URLs to point directly to the configured TorrServer host
                 let directTorrHost = (settings.useExternalServers && !settings.externalTorrServerHost.isEmpty)
                     ? settings.externalTorrServerHost
-                    : "http://127.0.0.1:8090"
+                    : "http://127.0.0.1:\(torrPort)"
                 
                 if finalUrlString.contains("/torrserver/stream/") {
-                    finalUrlString = finalUrlString.replacingOccurrences(of: "http://127.0.0.1:8098/torrserver", with: directTorrHost)
+                    finalUrlString = finalUrlString.replacingOccurrences(of: "http://127.0.0.1:\(configPort)/torrserver", with: directTorrHost)
+                } else if finalUrlString.contains("127.0.0.1:\(torrPort)/stream/") || finalUrlString.contains("localhost:\(torrPort)/stream/") {
+                    finalUrlString = finalUrlString.replacingOccurrences(of: "http://127.0.0.1:\(torrPort)", with: directTorrHost)
+                    finalUrlString = finalUrlString.replacingOccurrences(of: "http://localhost:\(torrPort)", with: directTorrHost)
                 } else if finalUrlString.contains("127.0.0.1:8090/stream/") || finalUrlString.contains("localhost:8090/stream/") {
                     finalUrlString = finalUrlString.replacingOccurrences(of: "http://127.0.0.1:8090", with: directTorrHost)
                     finalUrlString = finalUrlString.replacingOccurrences(of: "http://localhost:8090", with: directTorrHost)
@@ -295,5 +304,17 @@ public struct LibraryWebView: NSViewRepresentable {
         public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             LogManager.shared.log(serviceId: "system", text: "LibraryWebView navigation failed: \(error.localizedDescription)", isError: true)
         }
+    }
+}
+
+private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    private weak var delegate: WKScriptMessageHandler?
+    
+    init(delegate: WKScriptMessageHandler) {
+        self.delegate = delegate
+    }
+    
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        delegate?.userContentController(userContentController, didReceive: message)
     }
 }

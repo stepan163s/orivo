@@ -221,24 +221,30 @@ public final class SolverServer: @unchecked Sendable {
     public func start() {
         guard listener == nil else { return }
         
-        do {
-            listener = try NWListener(using: .tcp, on: 8191) // Port 8191 is FlareSolverr's default port
-            listener?.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    LogManager.shared.log(serviceId: "system", text: "Native FlareSolverr bypass service started on port 8191.")
-                case .failed(let error):
-                    LogManager.shared.log(serviceId: "system", text: "Native FlareSolverr service failed to start: \(error.localizedDescription)", isError: true)
-                default:
-                    break
+        Task { @MainActor in
+            let port = ServiceManager.shared.resolvedFlareSolverrPort
+            do {
+                let resolvedPort = NWEndpoint.Port(rawValue: UInt16(port)) ?? 8191
+                let listener = try NWListener(using: .tcp, on: resolvedPort)
+                self.listener = listener
+                
+                listener.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready:
+                        LogManager.shared.log(serviceId: "system", text: "Native FlareSolverr bypass service started on port \(port).")
+                    case .failed(let error):
+                        LogManager.shared.log(serviceId: "system", text: "Native FlareSolverr service failed to start on port \(port): \(error.localizedDescription)", isError: true)
+                    default:
+                        break
+                    }
                 }
+                listener.newConnectionHandler = { [weak self] connection in
+                    self?.handleConnection(connection)
+                }
+                listener.start(queue: self.queue)
+            } catch {
+                LogManager.shared.log(serviceId: "system", text: "Native FlareSolverr service init error on port \(port): \(error.localizedDescription)", isError: true)
             }
-            listener?.newConnectionHandler = { [weak self] connection in
-                self?.handleConnection(connection)
-            }
-            listener?.start(queue: queue)
-        } catch {
-            LogManager.shared.log(serviceId: "system", text: "Native FlareSolverr service init error: \(error.localizedDescription)", isError: true)
         }
     }
     

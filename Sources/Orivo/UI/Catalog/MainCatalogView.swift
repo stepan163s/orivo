@@ -616,7 +616,7 @@ struct RankMovieCard: View {
             onSelect(media)
         }) {
             ZStack(alignment: .topTrailing) {
-                AsyncImage(url: media.posterURL) { image in
+                CachedAsyncImage(url: media.posterURL) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -705,7 +705,7 @@ struct MovieCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 // Poster Image
                 ZStack(alignment: .topTrailing) {
-                    AsyncImage(url: media.posterURL) { image in
+                    CachedAsyncImage(url: media.posterURL) { image in
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
@@ -775,7 +775,7 @@ struct HeroMarqueeView: View {
             
             ZStack(alignment: .bottomLeading) {
                 // Backdrop Image
-                AsyncImage(url: media.backdropURL) { image in
+                CachedAsyncImage(url: media.backdropURL) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)

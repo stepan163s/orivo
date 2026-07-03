@@ -35,14 +35,22 @@ public final class LibraryManager: ObservableObject {
     }
     
     public func saveFavorites() {
-        if let data = try? JSONEncoder().encode(favorites) {
-            try? data.write(to: favoritesURL)
+        let favs = favorites
+        let url = favoritesURL
+        DispatchQueue.global(qos: .utility).async {
+            if let data = try? JSONEncoder().encode(favs) {
+                try? data.write(to: url, options: .atomic)
+            }
         }
     }
     
     public func saveHistory() {
-        if let data = try? JSONEncoder().encode(history) {
-            try? data.write(to: historyURL)
+        let hist = history
+        let url = historyURL
+        DispatchQueue.global(qos: .utility).async {
+            if let data = try? JSONEncoder().encode(hist) {
+                try? data.write(to: url, options: .atomic)
+            }
         }
     }
     

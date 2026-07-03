@@ -37,13 +37,14 @@ public final class SettingsManager: ObservableObject {
     }
     
     public func saveSettings() {
-        do {
-            let data = try JSONEncoder().encode(settings)
-            try data.write(to: configURL)
-            updateLaunchAtLogin()
-        } catch {
-            LogManager.shared.log(serviceId: "system", text: "Failed to save settings: \(error.localizedDescription)", isError: true)
+        let set = settings
+        let url = configURL
+        DispatchQueue.global(qos: .utility).async {
+            if let data = try? JSONEncoder().encode(set) {
+                try? data.write(to: url, options: .atomic)
+            }
         }
+        updateLaunchAtLogin()
     }
     
     public func updateSetting<T>(_ keyPath: WritableKeyPath<AppSettings, T>, value: T) {
