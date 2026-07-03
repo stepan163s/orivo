@@ -36,7 +36,7 @@ public final class LogManager: @unchecked Sendable {
             self.inMemoryLogs[serviceId] = current
         }
         
-        queue.async {
+        queue.async(flags: .barrier) {
             self.writeToDisk(serviceId: serviceId, line: line + "\n")
         }
     }

@@ -47,11 +47,13 @@ public final class ConfigServer: @unchecked Sendable {
                 connection.cancel()
                 return
             }
-            self?.processRequest(data, connection: connection)
+            Task {
+                await self?.processRequest(data, connection: connection)
+            }
         }
     }
     
-    private func processRequest(_ data: Data, connection: NWConnection) {
+    private func processRequest(_ data: Data, connection: NWConnection) async {
         let request = String(data: data, encoding: .utf8) ?? ""
         let lines = request.components(separatedBy: "\r\n")
         guard let firstLine = lines.first else { connection.cancel(); return }
@@ -70,18 +72,26 @@ public final class ConfigServer: @unchecked Sendable {
             return
         }
         
-        // CORS proxy: forward /jackett/* → http://127.0.0.1:9117/*
+        let settings = await MainActor.run { SettingsManager.shared.settings }
+        
+        // CORS proxy: forward /jackett/* → http://127.0.0.1:9117/* (or external host)
         if path.hasPrefix("/jackett") {
             let jackettPath = String(path.dropFirst("/jackett".count))
-            let jackettURL = "http://127.0.0.1:9117" + (jackettPath.isEmpty ? "/" : jackettPath)
+            let upstreamBase = (settings.useExternalServers && !settings.externalJackettHost.isEmpty)
+                ? settings.externalJackettHost
+                : "http://127.0.0.1:9117"
+            let jackettURL = upstreamBase + (jackettPath.isEmpty ? "/" : jackettPath)
             proxyToJackett(urlString: jackettURL, connection: connection)
             return
         }
         
-        // CORS proxy: forward /torrserver/* → http://127.0.0.1:8090/*
+        // CORS proxy: forward /torrserver/* → http://127.0.0.1:8090/* (or external host)
         if path.hasPrefix("/torrserver") {
             let torrPath = String(path.dropFirst("/torrserver".count))
-            let torrURL = "http://127.0.0.1:8090" + (torrPath.isEmpty ? "/" : torrPath)
+            let upstreamBase = (settings.useExternalServers && !settings.externalTorrServerHost.isEmpty)
+                ? settings.externalTorrServerHost
+                : "http://127.0.0.1:8090"
+            let torrURL = upstreamBase + (torrPath.isEmpty ? "/" : torrPath)
             proxyRequest(urlString: torrURL, connection: connection)
             return
         }

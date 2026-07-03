@@ -132,11 +132,89 @@ public final class SolverWebViewManager: NSObject, WKNavigationDelegate {
     }
 }
 
+/// A connection handler that correctly resolves TCP packet fragmentation for HTTP request parsing.
+private final class SolverConnectionHandler {
+    private let connection: NWConnection
+    private let queue: DispatchQueue
+    private var buffer = Data()
+    private let onComplete: (Data) -> Void
+    private let onError: (Error) -> Void
+    
+    init(connection: NWConnection, queue: DispatchQueue, onComplete: @escaping (Data) -> Void, onError: @escaping (Error) -> Void) {
+        self.connection = connection
+        self.queue = queue
+        self.onComplete = onComplete
+        self.onError = onError
+    }
+    
+    func start() {
+        connection.start(queue: queue)
+        readNext()
+    }
+    
+    private func readNext() {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                self.onError(error)
+                return
+            }
+            
+            if let data = data, !data.isEmpty {
+                self.buffer.append(data)
+                self.checkBuffer()
+            } else if isComplete {
+                self.onComplete(self.buffer)
+            } else {
+                self.connection.cancel()
+            }
+        }
+    }
+    
+    private func checkBuffer() {
+        // HTTP double line ending separator
+        guard let separatorRange = buffer.range(of: Data([13, 10, 13, 10])) else {
+            readNext()
+            return
+        }
+        
+        // Parse Content-Length header to determine full payload bounds
+        let headersData = buffer.subdata(in: 0..<separatorRange.lowerBound)
+        guard let headersString = String(data: headersData, encoding: .utf8) else {
+            self.onError(NSError(domain: "SolverConnectionHandler", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP headers encoding"]))
+            return
+        }
+        
+        var contentLength = 0
+        let lines = headersString.components(separatedBy: "\r\n")
+        for line in lines {
+            let parts = line.components(separatedBy: ":")
+            if parts.count >= 2 && parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
+                if let parsedLength = Int(parts[1].trimmingCharacters(in: .whitespaces)) {
+                    contentLength = parsedLength
+                    break
+                }
+            }
+        }
+        
+        let totalRequiredBytes = separatorRange.upperBound + contentLength
+        if buffer.count >= totalRequiredBytes {
+            let fullRequest = buffer.subdata(in: 0..<totalRequiredBytes)
+            onComplete(fullRequest)
+        } else {
+            readNext()
+        }
+    }
+}
+
 public final class SolverServer: @unchecked Sendable {
     public static let shared = SolverServer()
     
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "com.orivo.solverserver", qos: .userInitiated)
+    private var activeHandlers: [UUID: SolverConnectionHandler] = [:]
+    private let handlerLock = NSLock()
     
     private init() {}
     
@@ -167,26 +245,39 @@ public final class SolverServer: @unchecked Sendable {
     public func stop() {
         listener?.cancel()
         listener = nil
+        handlerLock.lock()
+        activeHandlers.removeAll()
+        handlerLock.unlock()
         LogManager.shared.log(serviceId: "system", text: "Native FlareSolverr bypass service stopped.")
     }
     
     private func handleConnection(_ connection: NWConnection) {
-        connection.start(queue: queue)
-        LogManager.shared.log(serviceId: "system", text: "SolverServer: Received connection.")
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, error in
-            if let error = error {
-                LogManager.shared.log(serviceId: "system", text: "SolverServer connection receive error: \(error.localizedDescription)", isError: true)
+        let handlerId = UUID()
+        let handler = SolverConnectionHandler(
+            connection: connection,
+            queue: queue,
+            onComplete: { [weak self] fullData in
+                self?.processRequest(fullData, connection: connection)
+                self?.removeHandler(id: handlerId)
+            },
+            onError: { [weak self] error in
+                LogManager.shared.log(serviceId: "system", text: "SolverServer stream error: \(error.localizedDescription)", isError: true)
                 connection.cancel()
-                return
+                self?.removeHandler(id: handlerId)
             }
-            guard let data = data, !data.isEmpty else {
-                LogManager.shared.log(serviceId: "system", text: "SolverServer: Received empty data or EOF.")
-                connection.cancel()
-                return
-            }
-            LogManager.shared.log(serviceId: "system", text: "SolverServer: Received \(data.count) bytes.")
-            self?.processRequest(data, connection: connection)
-        }
+        )
+        
+        handlerLock.lock()
+        activeHandlers[handlerId] = handler
+        handlerLock.unlock()
+        
+        handler.start()
+    }
+    
+    private func removeHandler(id: UUID) {
+        handlerLock.lock()
+        activeHandlers[id] = nil
+        handlerLock.unlock()
     }
     
     private func processRequest(_ data: Data, connection: NWConnection) {
@@ -199,14 +290,13 @@ public final class SolverServer: @unchecked Sendable {
             return
         }
         
-        let components = requestString.components(separatedBy: "\r\n\r\n")
-        guard components.count >= 2 else {
-            LogManager.shared.log(serviceId: "system", text: "SolverServer: No body payload found in HTTP request.", isError: true)
+        guard let bodySeparatorRange = requestString.range(of: "\r\n\r\n") else {
+            LogManager.shared.log(serviceId: "system", text: "SolverServer: No body payload separator found in HTTP request.", isError: true)
             sendResponse(body: "{\"status\": \"error\", \"message\": \"No body payload found\"}", connection: connection)
             return
         }
         
-        let body = components[1]
+        let body = String(requestString[bodySeparatorRange.upperBound...])
         LogManager.shared.log(serviceId: "system", text: "SolverServer Request body: \(body)")
         guard let bodyData = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],

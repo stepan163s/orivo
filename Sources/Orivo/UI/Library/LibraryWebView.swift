@@ -31,14 +31,16 @@ public struct LibraryWebView: NSViewRepresentable {
         let configuration = WKWebViewConfiguration()
         let settings = SettingsManager.shared.settings
         
-        // Resolve dynamic variables based on settings
         let jackettKey = settings.useExternalServers ? settings.externalJackettApiKey : getLocalJackettAPIKey()
-        let jackettProxyBase = (settings.useExternalServers && !settings.externalJackettHost.isEmpty)
-            ? settings.externalJackettHost
+        let isExternalLampa = settings.useExternalServers && !settings.externalLampaURL.isEmpty
+        
+        let jackettProxyBase = isExternalLampa 
+            ? (settings.externalJackettHost.isEmpty ? "http://127.0.0.1:8098/jackett" : settings.externalJackettHost) 
             : "http://127.0.0.1:8098/jackett"
-        let torrserverURL = (settings.useExternalServers && !settings.externalTorrServerHost.isEmpty)
-            ? settings.externalTorrServerHost
-            : "http://127.0.0.1:8090"
+            
+        let torrserverURL = isExternalLampa 
+            ? (settings.externalTorrServerHost.isEmpty ? "http://127.0.0.1:8090" : settings.externalTorrServerHost) 
+            : "http://127.0.0.1:8098/torrserver"
         
         // 1. Console Log redirection bridge script
         let logBridgeSource = """
@@ -242,10 +244,25 @@ public struct LibraryWebView: NSViewRepresentable {
                     return
                 }
                 
-                LogManager.shared.log(serviceId: "system", text: "LibraryWebView playerHandler received stream URL: \(urlString)")
+                let settings = SettingsManager.shared.settings
+                var finalUrlString = urlString
+                
+                // Rewrite proxied or local TorrServer URLs to point directly to the configured TorrServer host
+                let directTorrHost = (settings.useExternalServers && !settings.externalTorrServerHost.isEmpty)
+                    ? settings.externalTorrServerHost
+                    : "http://127.0.0.1:8090"
+                
+                if finalUrlString.contains("/torrserver/stream/") {
+                    finalUrlString = finalUrlString.replacingOccurrences(of: "http://127.0.0.1:8098/torrserver", with: directTorrHost)
+                } else if finalUrlString.contains("127.0.0.1:8090/stream/") || finalUrlString.contains("localhost:8090/stream/") {
+                    finalUrlString = finalUrlString.replacingOccurrences(of: "http://127.0.0.1:8090", with: directTorrHost)
+                    finalUrlString = finalUrlString.replacingOccurrences(of: "http://localhost:8090", with: directTorrHost)
+                }
+                
+                LogManager.shared.log(serviceId: "system", text: "LibraryWebView playerHandler playing direct stream URL: \(finalUrlString)")
                 
                 var title = "Orivo Media Player"
-                if let url = URL(string: urlString) {
+                if let url = URL(string: finalUrlString) {
                     let filename = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
                     if !filename.isEmpty && filename != "play" && filename != "stream" {
                         title = filename
@@ -253,7 +270,7 @@ public struct LibraryWebView: NSViewRepresentable {
                 }
                 
                 DispatchQueue.main.async {
-                    AppStateManager.shared.play(url: urlString, title: title)
+                    AppStateManager.shared.play(url: finalUrlString, title: title)
                 }
             }
         }
