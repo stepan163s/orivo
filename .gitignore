@@ -10,3 +10,8 @@ DerivedData/
 .LSOverride
 *.swp
 *.lock
+
+# Temporary and Build Files
+Orivo.dmg
+scratch/
+.agents/
