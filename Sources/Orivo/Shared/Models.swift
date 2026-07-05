@@ -100,6 +100,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     // Kinorium configuration
     public var kinoriumToken: String
     public var kinoriumEmail: String
+    public var kinoriumBypassVPN: Bool
     
     public init(
         launchAtLogin: Bool,
@@ -127,7 +128,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
         traktClientID: String = "",
         traktClientSecret: String = "",
         kinoriumToken: String = "",
-        kinoriumEmail: String = ""
+        kinoriumEmail: String = "",
+        kinoriumBypassVPN: Bool = false
     ) {
         self.launchAtLogin = launchAtLogin
         self.player = player
@@ -155,6 +157,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.traktClientSecret = traktClientSecret
         self.kinoriumToken = kinoriumToken
         self.kinoriumEmail = kinoriumEmail
+        self.kinoriumBypassVPN = kinoriumBypassVPN
     }
     
     public init(from decoder: Decoder) throws {
@@ -187,6 +190,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.traktClientSecret = try container.decodeIfPresent(String.self, forKey: .traktClientSecret) ?? ""
         self.kinoriumToken = try container.decodeIfPresent(String.self, forKey: .kinoriumToken) ?? ""
         self.kinoriumEmail = try container.decodeIfPresent(String.self, forKey: .kinoriumEmail) ?? ""
+        self.kinoriumBypassVPN = try container.decodeIfPresent(Bool.self, forKey: .kinoriumBypassVPN) ?? false
     }
     
     public static let defaultSettings = AppSettings(
@@ -215,7 +219,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
         traktClientID: "",
         traktClientSecret: "",
         kinoriumToken: "",
-        kinoriumEmail: ""
+        kinoriumEmail: "",
+        kinoriumBypassVPN: false
     )
 }
 

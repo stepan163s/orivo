@@ -102,18 +102,36 @@ public struct SettingsView: View {
                         settingsManager.saveSettings()
                         kinoriumStatusText = "Успешно авторизовано!"
                         
-                    case .deepLink(_, let parameters):
-                        let email = parameters["access_token[email]"] ?? "Apple OAuth Profile"
-                        let token = parameters["access_token[id]"] ?? ""
+                    case .deepLink(let rawURL, let parameters):
+                        let isGoogle = rawURL.contains("type=google")
+                        let email = isGoogle 
+                            ? (parameters["email"] ?? "") 
+                            : (parameters["access_token[email]"] ?? "Apple OAuth Profile")
+                        let token = isGoogle 
+                            ? (parameters["access_token"] ?? "") 
+                            : (parameters["access_token[id]"] ?? "")
                         let secret = parameters["secret"] ?? ""
                         
-                        kinoriumStatusText = "Завершаем авторизацию через Apple ID..."
+                        if isGoogle {
+                            kinoriumStatusText = "Завершаем авторизацию через Google..."
+                        } else {
+                            kinoriumStatusText = "Завершаем авторизацию через Apple ID..."
+                        }
+                        
                         isLoggingInKinorium = true
                         Task {
                             do {
-                                try await KinoriumClient.shared.authenticateWithApple(accessTokenID: token, email: email, secret: secret)
+                                if isGoogle {
+                                    try await KinoriumClient.shared.authenticateWithGoogle(accessToken: token, email: email, secret: secret)
+                                } else {
+                                    try await KinoriumClient.shared.authenticateWithApple(accessTokenID: token, email: email, secret: secret)
+                                }
                                 await MainActor.run {
-                                    self.kinoriumStatusText = "Успешно авторизовано через Apple ID!"
+                                    if isGoogle {
+                                        self.kinoriumStatusText = "Успешно авторизовано через Google!"
+                                    } else {
+                                        self.kinoriumStatusText = "Успешно авторизовано через Apple ID!"
+                                    }
                                     self.isLoggingInKinorium = false
                                 }
                             } catch {
@@ -1002,6 +1020,38 @@ public struct SettingsView: View {
                         .background(Color.white.opacity(0.04))
                         .cornerRadius(6)
                 }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
+            // Box 6: Experimental Features
+            VStack(alignment: .leading, spacing: 12) {
+                Text(loc.currentLanguage == "ru" ? "Экспериментальные функции" : "Experimental Features")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                Text(loc.currentLanguage == "ru"
+                    ? "Дополнительные функции, находящиеся в режиме бета-тестирования."
+                    : "Advanced features currently in beta testing.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.6))
+                
+                Toggle(loc.currentLanguage == "ru"
+                    ? "Обход VPN/прокси для Кинориум"
+                    : "Bypass VPN/proxy for Kinorium",
+                    isOn: Binding(
+                        get: { settingsManager.settings.kinoriumBypassVPN },
+                        set: { settingsManager.updateSetting(\.kinoriumBypassVPN, value: $0) }
+                    )
+                )
+                .toggleStyle(CheckboxToggleStyle())
+                
+                Text(loc.currentLanguage == "ru"
+                    ? "Позволяет запросам к Кинориуму обходить системный VPN, отправляя их напрямую через вашего провайдера. Полезно, если Кинориум блокирует ваш VPN и выдает ошибку капчи."
+                    : "Routes Kinorium API requests directly through your ISP, bypassing system-wide VPN/proxy. Helpful if Kinorium blocks your VPN and returns captcha errors.")
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.4))
             }
             .padding(16)
             .background(Color.white.opacity(0.04))

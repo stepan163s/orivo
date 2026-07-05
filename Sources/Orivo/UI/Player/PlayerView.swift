@@ -378,12 +378,16 @@ public struct PlayerView: View {
                     self.currentTime = current
                 }
                 self.duration = total
+                
+                // Forward progress to AppStateManager for scrobbling and Kinorium status sync
+                AppStateManager.shared.updateProgress(current: current, total: total)
             }
         }
         
         player.onPlaybackStateChanged = { playing in
             DispatchQueue.main.async {
                 self.isPlaying = playing
+                AppStateManager.shared.onPlayerStateChanged?(playing)
             }
         }
     }

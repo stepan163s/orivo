@@ -421,7 +421,7 @@ public struct MovieDetailView: View {
                                                 showOnlineSelector = false
                                                 LogManager.shared.log(serviceId: "system", text: "Playing online stream URL: \(qual.url)")
                                                 LibraryManager.shared.addToHistory(media: media)
-                                                AppStateManager.shared.play(url: qual.url, title: "\(details.computedTitle) [\(qual.quality)]", mediaId: media.id)
+                                                AppStateManager.shared.play(url: qual.url, title: "\(details.computedTitle) [\(qual.quality)]", mediaId: media.id, kinoriumID: media.kinoriumID)
                                             }) {
                                                 HStack {
                                                     Image(systemName: "play.fill")
@@ -465,6 +465,7 @@ public struct MovieDetailView: View {
                 query: q.text,
                 title: activeSearchTitle ?? media.computedTitle,
                 mediaId: media.id,
+                kinoriumId: media.kinoriumID,
                 onClose: {
                     activeSearchQuery = nil
                 }

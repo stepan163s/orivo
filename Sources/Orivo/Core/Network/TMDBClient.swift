@@ -25,6 +25,9 @@ public struct TMDBMedia: Codable, Identifiable, Hashable {
     public let firstAirDate: String? // For TV Shows
     public let mediaType: String?
     
+    // Non-decodable mutable property to carry Kinorium metadata
+    public var kinoriumID: String? = nil
+    
     public var computedTitle: String {
         return title ?? name ?? "Unknown Title"
     }

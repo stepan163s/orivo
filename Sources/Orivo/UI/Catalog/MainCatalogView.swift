@@ -576,7 +576,9 @@ public struct MainCatalogView: View {
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 140, maximum: 160), spacing: 16)], spacing: 20) {
                         ForEach(kinoriumWatchlist) { item in
-                            KinoriumWatchItemCard(item: item)
+                            KinoriumWatchItemCard(item: item) { clickedItem in
+                                selectKinoriumItem(clickedItem)
+                            }
                         }
                     }
                     .padding(.horizontal, 24)
@@ -672,6 +674,58 @@ public struct MainCatalogView: View {
             kinoriumWatchlistError = error.localizedDescription
         }
         isLoadingKinoriumWatchlist = false
+    }
+    
+    private func selectKinoriumItem(_ item: KinoriumWatchItem) {
+        isLoadingKinoriumWatchlist = true
+        Task {
+            do {
+                let query = item.originalTitle ?? item.title
+                if !query.isEmpty {
+                    let results = try await TMDBClient.shared.searchMulti(query: query)
+                    
+                    let match = results.first(where: { res in
+                        if let year = item.year, !year.isEmpty {
+                            return res.computedReleaseYear == year
+                        }
+                        return false
+                    }) ?? results.first
+                    
+                    await MainActor.run {
+                        if let match {
+                            var matchCopy = match
+                            matchCopy.kinoriumID = item.kinoriumID
+                            self.selectedMedia = matchCopy
+                        } else {
+                            Task {
+                                do {
+                                    let localResults = try await TMDBClient.shared.searchMulti(query: item.title)
+                                    let localMatch = localResults.first(where: { res in
+                                        if let year = item.year, !year.isEmpty {
+                                            return res.computedReleaseYear == year
+                                        }
+                                        return false
+                                    }) ?? localResults.first
+                                    
+                                    await MainActor.run {
+                                        if let localMatch {
+                                            var localMatchCopy = localMatch
+                                            localMatchCopy.kinoriumID = item.kinoriumID
+                                            self.selectedMedia = localMatchCopy
+                                        }
+                                    }
+                                } catch {}
+                            }
+                        }
+                    }
+                }
+            } catch {
+                print("Error searching TMDB: \(error.localizedDescription)")
+            }
+            await MainActor.run {
+                isLoadingKinoriumWatchlist = false
+            }
+        }
     }
 }
 
@@ -874,40 +928,46 @@ struct MovieCard: View {
 
 struct KinoriumWatchItemCard: View {
     let item: KinoriumWatchItem
+    let onSelect: (KinoriumWatchItem) -> Void
     @State private var isHovered = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            CachedAsyncImage(url: item.posterURL) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white.opacity(0.06))
-                    .overlay(
-                        Image(systemName: "film")
-                            .foregroundColor(.white.opacity(0.2))
-                    )
+        Button(action: {
+            onSelect(item)
+        }) {
+            VStack(alignment: .leading, spacing: 6) {
+                CachedAsyncImage(url: item.posterURL) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.white.opacity(0.06))
+                        .overlay(
+                            Image(systemName: "film")
+                                .foregroundColor(.white.opacity(0.2))
+                        )
+                }
+                .frame(width: 130, height: 195)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .shadow(radius: isHovered ? 8 : 2)
+                .scaleEffect(isHovered ? 1.03 : 1.0)
+                .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+                
+                Text(item.title)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .frame(width: 130, alignment: .leading)
+                
+                Text(item.year ?? item.originalTitle ?? "Кинориум")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.5))
+                    .lineLimit(1)
+                    .frame(width: 130, alignment: .leading)
             }
-            .frame(width: 130, height: 195)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .shadow(radius: isHovered ? 8 : 2)
-            .scaleEffect(isHovered ? 1.03 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
-            
-            Text(item.title)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .frame(width: 130, alignment: .leading)
-            
-            Text(item.year ?? item.originalTitle ?? "Кинориум")
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-                .foregroundColor(.white.opacity(0.5))
-                .lineLimit(1)
-                .frame(width: 130, alignment: .leading)
         }
+        .buttonStyle(PlainButtonStyle())
         .onHover { hover in
             isHovered = hover
         }

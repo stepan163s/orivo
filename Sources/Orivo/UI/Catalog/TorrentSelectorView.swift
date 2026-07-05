@@ -13,12 +13,14 @@ public struct TorrentSelectorView: View {
     let query: String
     let title: String
     let mediaId: Int?
+    let kinoriumId: String?
     let onClose: () -> Void
     
-    public init(query: String, title: String, mediaId: Int? = nil, onClose: @escaping () -> Void) {
+    public init(query: String, title: String, mediaId: Int? = nil, kinoriumId: String? = nil, onClose: @escaping () -> Void) {
         self.query = query
         self.title = title
         self.mediaId = mediaId
+        self.kinoriumId = kinoriumId
         self.onClose = onClose
     }
     
@@ -334,6 +336,7 @@ public struct TorrentSelectorView: View {
                     filename: activeBufferFilename,
                     title: title,
                     mediaId: mediaId,
+                    kinoriumId: kinoriumId,
                     onClose: {
                         activeBufferHash = nil
                     }

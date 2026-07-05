@@ -202,6 +202,45 @@ struct LibraryWindowView: View {
                 .transition(.opacity)
                 .ignoresSafeArea()
             }
+            
+            // HUD Toast Notification Overlay
+            if let hudMessage = appState.hudMessage {
+                VStack {
+                    HStack {
+                        Spacer()
+                        HStack(spacing: 8) {
+                            Image(systemName: appState.hudIsSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                .foregroundColor(appState.hudIsSuccess ? Color.green : Color.red)
+                                .font(.system(size: 14, weight: .bold))
+                            
+                            Text(hudMessage)
+                                .foregroundColor(.white)
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.black.opacity(0.85))
+                                .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(appState.hudIsSuccess ? Color.green.opacity(0.2) : Color.red.opacity(0.2), lineWidth: 1)
+                        )
+                        .padding(.top, 24)
+                        .padding(.trailing, 24)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    Spacer()
+                }
+                .ignoresSafeArea()
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.hudMessage)
+                .zIndex(999) // Force overlay on top of player
+            }
+        }
+        .sheet(item: $appState.kinoriumRatingTarget) { target in
+            KinoriumRatingModalView(target: target)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenLibraryWindow"))) { _ in
             openWindow(id: "LibraryWindow")

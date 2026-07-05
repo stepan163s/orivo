@@ -6,14 +6,16 @@ public struct BufferingOverlayView: View {
     let filename: String
     let title: String
     let mediaId: Int?
+    let kinoriumId: String?
     let onClose: () -> Void
     
-    public init(hash: String, fileIndex: Int, filename: String, title: String, mediaId: Int? = nil, onClose: @escaping () -> Void) {
+    public init(hash: String, fileIndex: Int, filename: String, title: String, mediaId: Int? = nil, kinoriumId: String? = nil, onClose: @escaping () -> Void) {
         self.hash = hash
         self.fileIndex = fileIndex
         self.filename = filename
         self.title = title
         self.mediaId = mediaId
+        self.kinoriumId = kinoriumId
         self.onClose = onClose
     }
     
@@ -194,7 +196,7 @@ public struct BufferingOverlayView: View {
             NotificationCenter.default.post(name: NSNotification.Name("CloseCatalogSheets"), object: nil)
             
             // Launch native full-screen PlayerView
-            AppStateManager.shared.play(url: playURL, title: title, mediaId: mediaId)
+            AppStateManager.shared.play(url: playURL, title: title, mediaId: mediaId, kinoriumID: kinoriumId)
             // Close buffer overlay sheet
             onClose()
         }

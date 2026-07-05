@@ -49,8 +49,12 @@ public struct CachedAsyncImage<Content: View, Placeholder: View>: View {
         }
         
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+                LogManager.shared.log(serviceId: "system", text: "CachedAsyncImage: HTTP Error \(httpResponse.statusCode) loading image: \(url.absoluteString)", isError: true)
+            }
             guard let nsImage = NSImage(data: data) else {
+                LogManager.shared.log(serviceId: "system", text: "CachedAsyncImage: Failed to decode NSImage from \(data.count) bytes for: \(url.absoluteString)", isError: true)
                 self.phase = .failure(URLError(.cannotDecodeContentData))
                 return
             }
@@ -58,6 +62,7 @@ public struct CachedAsyncImage<Content: View, Placeholder: View>: View {
             ImageCache.shared.set(nsImage, for: url)
             self.phase = .success(Image(nsImage: nsImage))
         } catch {
+            LogManager.shared.log(serviceId: "system", text: "CachedAsyncImage: Network error: \(error.localizedDescription) loading image: \(url.absoluteString)", isError: true)
             self.phase = .failure(error)
         }
     }

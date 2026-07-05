@@ -43,6 +43,10 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     public var onPlaybackStateChanged: ((Bool) -> Void)? // isPlaying
     public var onRenderUpdate: (() -> Void)?
     
+    // Playback state cache
+    public private(set) var currentTime: Double = 0.0
+    public private(set) var duration: Double = 0.0
+    
     private var pendingPlayUrl: String? = nil
     
     private let eventLoopSemaphore = DispatchSemaphore(value: 0)
@@ -405,9 +409,11 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
                         let value = prop.data.assumingMemoryBound(to: Double.self).pointee
                         if name == "time-pos" {
                             timePos = value
+                            self.currentTime = value
                             self.onPlaybackProgress?(timePos, duration)
                         } else if name == "duration" {
                             duration = value
+                            self.duration = value
                             self.onPlaybackProgress?(timePos, duration)
                         }
                     } else if prop.format == MPV_FORMAT_FLAG {
