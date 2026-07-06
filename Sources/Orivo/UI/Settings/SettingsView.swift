@@ -4,6 +4,7 @@ public struct SettingsView: View {
     @ObservedObject var settingsManager = SettingsManager.shared
     @ObservedObject var serviceManager = ServiceManager.shared
     @ObservedObject var loc = LocalizationManager.shared
+    @ObservedObject var updater = OrivoUpdater.shared
     @Binding var showSettings: Bool
     
     @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
@@ -1273,9 +1274,25 @@ public struct SettingsView: View {
                 ))
                 .toggleStyle(CheckboxToggleStyle())
                 
-                Toggle(loc.tr("check_updates"), isOn: .constant(true))
-                .toggleStyle(CheckboxToggleStyle())
-                .disabled(true)
+                HStack(spacing: 12) {
+                    Toggle(loc.tr("check_updates"), isOn: $updater.automaticallyChecksForUpdates)
+                        .toggleStyle(CheckboxToggleStyle())
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        updater.checkForUpdates()
+                    }) {
+                        Text("Проверить сейчас")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(.plain)
+                }
                 
                 Toggle(loc.tr("open_library_launch"), isOn: Binding(
                     get: { settingsManager.settings.openLibraryOnLaunch },

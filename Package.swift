@@ -9,7 +9,9 @@ let package = Package(
     products: [
         .executable(name: "Orivo", targets: ["Orivo"])
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.5.2")
+    ],
     targets: [
         .target(
             name: "Cmpv",
@@ -18,7 +20,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "Orivo",
-            dependencies: ["Cmpv"],
+            dependencies: [
+                "Cmpv",
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
             path: "Sources/Orivo",
             resources: [
                 .copy("Resources/Lampa")

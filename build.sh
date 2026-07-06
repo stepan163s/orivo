@@ -155,6 +155,12 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/stepan163s/orivo/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>+/G7vB1+22/eXb7UuPfVb3tJe8t90lrcQzXj9cRcpW8=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
 </dict>
 </plist>
 EOF
