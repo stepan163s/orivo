@@ -361,6 +361,11 @@ public struct MainCatalogView: View {
         .sheet(item: $selectedMedia) { media in
             MovieDetailView(media: media)
         }
+        .onChange(of: selectedMedia) { media in
+            if let media = media {
+                PreloadTracker.shared.start(for: media.id)
+            }
+        }
         .alert("Orivo Account", isPresented: $showOrivoAccountAlert) {
             Button("ОК", role: .cancel) {}
         } message: {

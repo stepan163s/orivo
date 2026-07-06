@@ -33,52 +33,42 @@ public struct MovieDetailView: View {
     public var body: some View {
         ZStack {
             // Blurred backdrop background
-            if let details = details {
-                CachedAsyncImage(url: details.backdropURL) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Color.black
-                }
-                .frame(minWidth: 800, minHeight: 600)
-                .ignoresSafeArea()
-                .blur(radius: 40)
-                .overlay(Color.black.opacity(0.6))
-            } else {
-                Color.black.opacity(0.8)
-                    .ignoresSafeArea()
-            }
-            
-            // Detail Scroll container
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header Bar with Close Button
-                    HStack {
-                        Spacer()
-                        Button(action: { dismiss() }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.white)
-                                .frame(width: 32, height: 32)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(PlainButtonStyle())
+            ZStack {
+                if let details = details {
+                    CachedAsyncImage(url: details.backdropURL) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.black
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 20)
-                    
-                    if isLoading {
-                        VStack {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
-                        }
-                        .frame(minHeight: 400)
-                    } else if let details = details {
-                        // Main info row
-                        HStack(alignment: .top, spacing: 24) {
+                    .frame(width: 800, height: 600)
+                    .clipped()
+                    .ignoresSafeArea()
+                    .blur(radius: 40)
+                    .overlay(Color.black.opacity(0.6))
+                    .transition(.opacity)
+                } else {
+                    Color.black.opacity(0.8)
+                        .frame(width: 800, height: 600)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: 800, height: 600)
+            .clipped()
+            .animation(.easeInOut(duration: 0.3), value: details != nil)
+            
+            // Main Content ZStack
+            ZStack {
+                if isLoading {
+                    ProgressView()
+                        .transition(.opacity)
+                } else if let details = details {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 24) {
+                            // Main info row
+                            HStack(alignment: .top, spacing: 24) {
                             // Poster
                             CachedAsyncImage(url: details.posterURL) { image in
                                 image
@@ -331,9 +321,33 @@ public struct MovieDetailView: View {
                             .padding(.horizontal, 24)
                             .padding(.top, 12)
                         }
+                        }
+                        .padding(.top, 64)
+                        .padding(.bottom, 40)
+                        .frame(maxWidth: .infinity)
                     }
+                    .transition(.opacity)
                 }
-                .padding(.bottom, 40)
+            }
+            .animation(.easeInOut(duration: 0.2), value: isLoading)
+            
+            // Header Bar with Close Button (Always on top)
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                Spacer()
             }
             
             // Online Stream Selector Panel Overlay
@@ -480,30 +494,102 @@ public struct MovieDetailView: View {
         }
     }
     
+    private func preloadImage(url: URL) async throws -> NSImage {
+        let startTime = Date()
+        if let cached = ImageCache.shared.get(for: url) {
+            let duration = Date().timeIntervalSince(startTime) * 1000
+            LogManager.shared.log(serviceId: "system", text: "Preload: \(url.lastPathComponent) resolved from CACHE in \(String(format: "%.1f", duration))ms")
+            return cached
+        }
+        let (data, _) = try await URLSession.shared.data(from: url)
+        guard let nsImage = NSImage(data: data) else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        ImageCache.shared.set(nsImage, for: url)
+        let duration = Date().timeIntervalSince(startTime) * 1000
+        LogManager.shared.log(serviceId: "system", text: "Preload: \(url.lastPathComponent) downloaded in \(String(format: "%.1f", duration))ms (size: \(data.count) bytes)")
+        return nsImage
+    }
+
     private func loadDetails() async {
+        let overallStartTime = Date()
         isLoading = true
         do {
             let isTV = media.mediaType == "tv" || media.releaseDate == nil
+            let fetchedDetails: TMDBMediaDetail
+            
+            let jsonStartTime = Date()
             if isTV {
-                self.details = try await TMDBClient.shared.fetchTVShowDetails(id: media.id)
+                fetchedDetails = try await TMDBClient.shared.fetchTVShowDetails(id: media.id)
                 await loadSeasonEpisodes()
             } else {
-                self.details = try await TMDBClient.shared.fetchMovieDetails(id: media.id)
+                fetchedDetails = try await TMDBClient.shared.fetchMovieDetails(id: media.id)
+            }
+            let jsonDuration = Date().timeIntervalSince(jsonStartTime) * 1000
+            LogManager.shared.log(serviceId: "system", text: "Preload: TMDB metadata JSON loaded in \(String(format: "%.1f", jsonDuration))ms")
+            
+            let prefetchStartTime = Date()
+            // Pre-download all critical assets concurrently in a single task group
+            await withTaskGroup(of: Void.self) { group in
+                if let backdropURL = fetchedDetails.backdropURL {
+                    group.addTask {
+                        _ = try? await preloadImage(url: backdropURL)
+                    }
+                }
+                if let posterURL = fetchedDetails.posterURL {
+                    group.addTask {
+                        _ = try? await preloadImage(url: posterURL)
+                    }
+                }
+            }
+            let prefetchDuration = Date().timeIntervalSince(prefetchStartTime) * 1000
+            LogManager.shared.log(serviceId: "system", text: "Preload: All media assets preloaded concurrently in \(String(format: "%.1f", prefetchDuration))ms")
+            
+            let totalDuration = Date().timeIntervalSince(overallStartTime) * 1000
+            LogManager.shared.log(serviceId: "system", text: "Preload: TOTAL details load pipeline completed in \(String(format: "%.1f", totalDuration))ms")
+            
+            await MainActor.run {
+                if let clickTime = PreloadTracker.shared.pop(for: media.id) {
+                    let perceivedDuration = Date().timeIntervalSince(clickTime) * 1000
+                    LogManager.shared.log(serviceId: "system", text: "Preload: PERCEIVED click-to-load duration is \(String(format: "%.1f", perceivedDuration))ms")
+                }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.details = fetchedDetails
+                    self.isLoading = false
+                }
             }
         } catch {
             print("Failed to load TMDB details: \(error.localizedDescription)")
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.isLoading = false
+                }
+            }
         }
-        isLoading = false
     }
     
     private func loadSeasonEpisodes() async {
-        isLoadingSeason = true
+        await MainActor.run {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.isLoadingSeason = true
+            }
+        }
         do {
-            self.seasonDetail = try await TMDBClient.shared.fetchTVSeasonDetails(tvShowId: media.id, seasonNumber: selectedSeason)
+            let fetchedSeason = try await TMDBClient.shared.fetchTVSeasonDetails(tvShowId: media.id, seasonNumber: selectedSeason)
+            
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    self.seasonDetail = fetchedSeason
+                }
+            }
         } catch {
             print("Failed to load TMDB season details: \(error.localizedDescription)")
         }
-        isLoadingSeason = false
+        await MainActor.run {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                self.isLoadingSeason = false
+            }
+        }
     }
     
     private func fetchOnlineStreams() {
@@ -541,5 +627,24 @@ extension View {
             self
             Spacer()
         }
+    }
+}
+
+public final class PreloadTracker: @unchecked Sendable {
+    public static let shared = PreloadTracker()
+    private var clickTimes: [Int: Date] = [:]
+    private let lock = NSLock()
+    
+    public func start(for mediaId: Int) {
+        lock.lock()
+        clickTimes[mediaId] = Date()
+        lock.unlock()
+    }
+    
+    public func pop(for mediaId: Int) -> Date? {
+        lock.lock()
+        let time = clickTimes.removeValue(forKey: mediaId)
+        lock.unlock()
+        return time
     }
 }

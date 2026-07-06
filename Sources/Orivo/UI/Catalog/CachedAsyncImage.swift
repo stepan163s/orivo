@@ -6,7 +6,8 @@ public struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     private let content: (Image) -> Content
     private let placeholder: () -> Placeholder
     
-    @State private var phase: AsyncImagePhase = .empty
+    @State private var loadedImage: NSImage? = nil
+    @State private var hasFailed = false
     
     public init(
         url: URL?,
@@ -16,19 +17,23 @@ public struct CachedAsyncImage<Content: View, Placeholder: View>: View {
         self.url = url
         self.content = content
         self.placeholder = placeholder
+        
+        // Synchronously check memory cache during initialization
+        if let url = url, let cachedImage = ImageCache.shared.get(for: url) {
+            self._loadedImage = State(initialValue: cachedImage)
+        } else {
+            self._loadedImage = State(initialValue: nil)
+        }
     }
     
     public var body: some View {
-        Group {
-            switch phase {
-            case .empty:
+        ZStack {
+            if let nsImage = loadedImage {
+                content(Image(nsImage: nsImage))
+                    .transition(.opacity)
+            } else {
                 placeholder()
-            case .success(let image):
-                content(image)
-            case .failure:
-                placeholder()
-            @unknown default:
-                placeholder()
+                    .transition(.opacity)
             }
         }
         .task(id: url) {
@@ -38,13 +43,24 @@ public struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     
     private func loadImage() async {
         guard let url = url else {
-            self.phase = .failure(URLError(.badURL))
+            await MainActor.run {
+                self.hasFailed = true
+            }
             return
         }
         
-        // Check cache first
+        // If already loaded synchronously during init, skip fetching
+        if loadedImage != nil {
+            return
+        }
+        
+        // Re-check cache just in case it was cached after init
         if let cachedImage = ImageCache.shared.get(for: url) {
-            self.phase = .success(Image(nsImage: cachedImage))
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.35)) {
+                    self.loadedImage = cachedImage
+                }
+            }
             return
         }
         
@@ -55,32 +71,40 @@ public struct CachedAsyncImage<Content: View, Placeholder: View>: View {
             }
             guard let nsImage = NSImage(data: data) else {
                 LogManager.shared.log(serviceId: "system", text: "CachedAsyncImage: Failed to decode NSImage from \(data.count) bytes for: \(url.absoluteString)", isError: true)
-                self.phase = .failure(URLError(.cannotDecodeContentData))
+                await MainActor.run {
+                    self.hasFailed = true
+                }
                 return
             }
             // Store in cache
             ImageCache.shared.set(nsImage, for: url)
-            self.phase = .success(Image(nsImage: nsImage))
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.45)) {
+                    self.loadedImage = nsImage
+                }
+            }
         } catch {
             LogManager.shared.log(serviceId: "system", text: "CachedAsyncImage: Network error: \(error.localizedDescription) loading image: \(url.absoluteString)", isError: true)
-            self.phase = .failure(error)
+            await MainActor.run {
+                self.hasFailed = true
+            }
         }
     }
 }
 
-private final class ImageCache: @unchecked Sendable {
-    static let shared = ImageCache()
+public final class ImageCache: @unchecked Sendable {
+    public static let shared = ImageCache()
     private let cache = NSCache<NSURL, NSImage>()
     
     private init() {
         cache.countLimit = 150 // Keep up to 150 images in memory cache
     }
     
-    func get(for url: URL) -> NSImage? {
+    public func get(for url: URL) -> NSImage? {
         return cache.object(forKey: url as NSURL)
     }
     
-    func set(_ image: NSImage, for url: URL) {
+    public func set(_ image: NSImage, for url: URL) {
         cache.setObject(image, forKey: url as NSURL)
     }
 }

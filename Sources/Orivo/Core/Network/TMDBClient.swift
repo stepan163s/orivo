@@ -114,12 +114,12 @@ public struct TMDBMediaDetail: Codable {
     
     public var posterURL: URL? {
         guard let path = posterPath else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/w500\(path)")
+        return URL(string: "https://image.tmdb.org/t/p/w342\(path)")
     }
     
     public var backdropURL: URL? {
         guard let path = backdropPath else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/w1280\(path)")
+        return URL(string: "https://image.tmdb.org/t/p/w300\(path)")
     }
     
     enum CodingKeys: String, CodingKey {
