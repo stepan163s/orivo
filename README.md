@@ -52,8 +52,18 @@
 2. Open the downloaded DMG and drag **Orivo** into your **Applications** folder.
 3. On first launch, click **Open** on the macOS internet security warning dialog.
 
-> [!NOTE]
-> If a test build is not signed with a Developer ID certificate and macOS shows **"Apple could not verify Orivo is free of malware"**, that is Gatekeeper blocking an unnotarized app, not an Orivo runtime error. Public releases should be signed and notarized. For local testing, remove the quarantine attribute with `xattr -dr com.apple.quarantine /Applications/Orivo.app`, then open the app with right click → **Open**.
+> [!WARNING]
+> **Gatekeeper Bypass (Unsigned App Warning)**
+> Because this app is self-signed (built without a paid Apple Developer account), macOS Gatekeeper will block it on first launch, showing a warning that the app is "damaged" or "cannot be verified".
+> 
+> To bypass this and run Orivo:
+> 1. Open your **Terminal** app.
+> 2. Copy and paste the following command, then press Enter:
+>    ```bash
+>    sudo xattr -rd com.apple.quarantine /Applications/Orivo.app
+>    ```
+> 3. Enter your Mac's user password (no characters will show while typing) and press Enter.
+> 4. You can now launch Orivo normally!
 
 ---
 
