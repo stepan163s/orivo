@@ -15,3 +15,9 @@ DerivedData/
 Orivo.dmg
 scratch/
 .agents/
+
+# Sparkle key files
+*.key
+*.private
+eddsa_key.private
+sparkle_key.private

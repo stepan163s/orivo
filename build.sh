@@ -158,7 +158,7 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
     <key>SUFeedURL</key>
     <string>https://raw.githubusercontent.com/stepan163s/orivo/main/appcast.xml</string>
     <key>SUPublicEDKey</key>
-    <string>+/G7vB1+22/eXb7UuPfVb3tJe8t90lrcQzXj9cRcpW8=</string>
+    <string>hkDESdlTEljk93R3ORlVc5K2KnCTa0Zfj5qnsQNBl9g=</string>
     <key>SUEnableAutomaticChecks</key>
     <true/>
 </dict>
