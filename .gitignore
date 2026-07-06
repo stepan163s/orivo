@@ -21,3 +21,5 @@ scratch/
 *.private
 eddsa_key.private
 sparkle_key.private
+release_checklist.md
+image.png
