@@ -18,7 +18,7 @@
           <li>Исправлена шкала загрузки, скорость и число пиров в TorrServer overlay.</li>
         </ul>
       ]]></description>
-      <enclosure url="https://github.com/stepan163s/orivo/releases/download/v1.1.1/Orivo.dmg" sparkle:version="1.1.1" sparkle:shortVersionString="1.1.1" length="31971295" type="application/octet-stream" sparkle:edSignature="GprkNjbEHJX93q9Za4EyMPfQszlONHO+v4WD9yqO3YoFGfUVMjvhlC6RbnTqC86UANqv69qMp3DviTGDgWI9Aw==" />
+      <enclosure url="https://github.com/stepan163s/orivo/releases/download/v1.1.1/Orivo.dmg" sparkle:version="1.1.1" sparkle:shortVersionString="1.1.1" length="34223197" type="application/octet-stream" sparkle:edSignature="V0l/AtSR5LWz3olmgyCveqxS3MdCdffldlwp7RqHrcv5P2zsLnlTYwZ0hwarWnQMF4RtgwqIWDiMwNTdzr4cBw==" />
     </item>
   </channel>
 </rss>

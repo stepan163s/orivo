@@ -40,6 +40,16 @@ fi
 cp "$MPV_DYLIB" "$FRAMEWORKS_DIR/libmpv.2.dylib"
 chmod u+w "$FRAMEWORKS_DIR/libmpv.2.dylib"
 
+# Copy Sparkle.framework from .build
+SPARKLE_FRAMEWORK_PATH=$(find .build -name "Sparkle.framework" -type d | head -n 1)
+if [ -n "$SPARKLE_FRAMEWORK_PATH" ] && [ -d "$SPARKLE_FRAMEWORK_PATH" ]; then
+    echo "=== Copying Sparkle.framework into the bundle ==="
+    cp -R "$SPARKLE_FRAMEWORK_PATH" "$FRAMEWORKS_DIR/"
+else
+    echo "Error: Sparkle.framework was not found in .build. Make sure swift build succeeded."
+    exit 1
+fi
+
 copy_homebrew_dependency() {
     local dependency="$1"
     case "$dependency" in
