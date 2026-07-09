@@ -18,6 +18,9 @@ public final class SettingsManager: ObservableObject {
     }
     
     public func loadSettings() {
+        AppPerfTracker.shared.start("Load Settings")
+        defer { AppPerfTracker.shared.stop("Load Settings") }
+        
         let directory = configURL.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         

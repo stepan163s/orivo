@@ -217,6 +217,7 @@ public struct LibraryWebView: NSViewRepresentable {
         }
         
         // Load local bundle Lampa or external URL
+        AppPerfTracker.shared.start("Lampa Asset Loading")
         if settings.useExternalServers, !settings.externalLampaURL.isEmpty, let extURL = URL(string: settings.externalLampaURL) {
             LogManager.shared.log(serviceId: "system", text: "LibraryWebView: Loading external Lampa URL: \(extURL)")
             webView.load(URLRequest(url: extURL))
@@ -224,6 +225,7 @@ public struct LibraryWebView: NSViewRepresentable {
             if let localHTML = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Lampa") {
                 webView.loadFileURL(localHTML, allowingReadAccessTo: localHTML.deletingLastPathComponent())
             } else {
+                AppPerfTracker.shared.stop("Lampa Asset Loading")
                 LogManager.shared.log(serviceId: "system", text: "LibraryWebView error: Failed to find local Lampa index.html in resources bundle", isError: true)
             }
         }
@@ -300,11 +302,17 @@ public struct LibraryWebView: NSViewRepresentable {
             decisionHandler(.allow)
         }
         
+        public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            AppPerfTracker.shared.stop("Lampa Asset Loading")
+        }
+        
         public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            AppPerfTracker.shared.stop("Lampa Asset Loading")
             LogManager.shared.log(serviceId: "system", text: "LibraryWebView provisional navigation failed: \(error.localizedDescription)", isError: true)
         }
         
         public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            AppPerfTracker.shared.stop("Lampa Asset Loading")
             LogManager.shared.log(serviceId: "system", text: "LibraryWebView navigation failed: \(error.localizedDescription)", isError: true)
         }
     }

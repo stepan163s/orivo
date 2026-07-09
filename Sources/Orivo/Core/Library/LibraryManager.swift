@@ -24,6 +24,9 @@ public final class LibraryManager: ObservableObject {
     }
     
     public func loadAll() {
+        AppPerfTracker.shared.start("Load Library Local Data")
+        defer { AppPerfTracker.shared.stop("Load Library Local Data") }
+        
         if let data = try? Data(contentsOf: favoritesURL),
            let decoded = try? JSONDecoder().decode([TMDBMedia].self, from: data) {
             self.favorites = decoded
@@ -41,6 +44,9 @@ public final class LibraryManager: ObservableObject {
     public func syncWithCUB() async {
         let settings = SettingsManager.shared.settings
         guard !settings.cubToken.isEmpty else { return }
+        
+        AppPerfTracker.shared.start("Library CUB Sync")
+        defer { AppPerfTracker.shared.stop("Library CUB Sync") }
         
         LogManager.shared.log(serviceId: "system", text: "LibraryManager: Starting CUB synchronization...")
         do {

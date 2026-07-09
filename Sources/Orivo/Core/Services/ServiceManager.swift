@@ -19,6 +19,9 @@ public final class ServiceManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     private init() {
+        AppPerfTracker.shared.start("ServiceManager Init")
+        defer { AppPerfTracker.shared.stop("ServiceManager Init") }
+        
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         self.appSupportDir = appSupport.appendingPathComponent("Orivo", isDirectory: true)
@@ -62,6 +65,9 @@ public final class ServiceManager: ObservableObject {
     }
     
     private func resolveDynamicPorts() {
+        AppPerfTracker.shared.start("Port Resolution")
+        defer { AppPerfTracker.shared.stop("Port Resolution") }
+        
         let rawTorr = 8090
         let rawJackett = 9117
         let rawConfig = 8098
@@ -84,6 +90,9 @@ public final class ServiceManager: ObservableObject {
     }
     
     public func loadServices() {
+        AppPerfTracker.shared.start("Load Services Config")
+        defer { AppPerfTracker.shared.stop("Load Services Config") }
+        
         if FileManager.default.fileExists(atPath: configURL.path) {
             do {
                 let data = try Data(contentsOf: configURL)

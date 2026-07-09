@@ -4,9 +4,13 @@ import AppKit
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppPerfTracker.shared.start("App Launch Total")
         setupSignalHandlers()
         
+        AppPerfTracker.shared.start("MenuBar Setup")
         MenuBarController.shared.setupMenuBar()
+        AppPerfTracker.shared.stop("MenuBar Setup")
+        
         MenuBarController.shared.onOpenDashboard = {
             self.showMainWindow()
         }
@@ -23,15 +27,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         
         // Start Lampa auto-configuration server and native FlareSolverr
+        AppPerfTracker.shared.start("Config Server Start")
         ConfigServer.shared.start()
-        SolverServer.shared.start()
+        AppPerfTracker.shared.stop("Config Server Start")
+        
+        if SettingsManager.shared.settings.useInternalSolver {
+            AppPerfTracker.shared.start("FlareSolverr Server Start")
+            SolverServer.shared.start()
+            AppPerfTracker.shared.stop("FlareSolverr Server Start")
+        }
         
         let hasTorr = ServiceManager.shared.service(id: "torrserver").map { ServiceManager.shared.isBinaryInstalled(service: $0) } ?? false
         let hasJackett = ServiceManager.shared.service(id: "jackett").map { ServiceManager.shared.isBinaryInstalled(service: $0) } ?? false
         if hasTorr && hasJackett {
+            AppPerfTracker.shared.start("Auto-start Services Launch")
             ServiceManager.shared.startAllAutoStartServices()
             Watchdog.shared.startMonitoring()
+            AppPerfTracker.shared.stop("Auto-start Services Launch")
         }
+        AppPerfTracker.shared.stop("App Launch Total")
     }
     
     private func setupSignalHandlers() {
@@ -98,9 +112,11 @@ struct OrivoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     @State private var isOnboardingCompleted: Bool = {
+        AppPerfTracker.shared.start("Onboarding Status Check")
         let serviceManager = ServiceManager.shared
         let hasTorr = serviceManager.service(id: "torrserver").map { serviceManager.isBinaryInstalled(service: $0) } ?? false
         let hasJackett = serviceManager.service(id: "jackett").map { serviceManager.isBinaryInstalled(service: $0) } ?? false
+        AppPerfTracker.shared.stop("Onboarding Status Check")
         return hasTorr && hasJackett
     }()
     
