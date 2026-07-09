@@ -12,10 +12,10 @@
       <description><![CDATA[
         <h2>Что нового в Orivo 1.1.2:</h2>
         <ul>
-          <li>Полный продакшн-аудит и рефакторинг безопасности.</li>
-          <li>Безопасное хранение и шифрование секретов в локальном обфусцированном хранилище (без раздражающих запросов связки ключей macOS).</li>
-          <li>Исправление зависаний плеера при переопределении портов TorrServer.</li>
-          <li>Оптимизация сетевых запросов и стабильности соединения.</li>
+          <li>Повышена общая безопасность и надежность приложения.</li>
+          <li>Улучшено шифрование при хранении настроек и ключей доступа.</li>
+          <li>Исправлены зависания плеера при переопределении портов TorrServer.</li>
+          <li>Оптимизирована работа с сетью и повышена стабильность соединения.</li>
         </ul>
       ]]></description>
       <enclosure url="https://github.com/stepan163s/orivo/releases/download/v1.1.2/Orivo.dmg" sparkle:version="1.1.2" sparkle:shortVersionString="1.1.2" length="34242433" type="application/octet-stream" sparkle:edSignature="rO3JngPzaibtrjpKiEhf3fJ47I1sGXmI+bEOQwlRZji1bhzMlhn6Bn35/4iCIIq5D78PuDh45qAud4vLIbzjDQ==" />
