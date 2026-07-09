@@ -4,18 +4,31 @@ import WebKit
 import AppKit
 
 @MainActor
-public final class SolverWebViewManager: NSObject, WKNavigationDelegate {
-    public static let shared = SolverWebViewManager()
+private final class SolveSession: NSObject, WKNavigationDelegate {
+    let id: UUID
+    let urlString: String
+    let completion: (String?, [HTTPCookie], String?) -> Void
     
     private var webView: WKWebView?
     private var window: NSWindow?
-    private var pendingCompletion: ((String?, [HTTPCookie], String?) -> Void)?
-    
     private var solveTimer: Timer?
     private var solveTimeoutWorkItem: DispatchWorkItem?
+    private var onFinished: (() -> Void)?
     
-    private override init() {
+    init(id: UUID, urlString: String, completion: @escaping (String?, [HTTPCookie], String?) -> Void, onFinished: @escaping () -> Void) {
+        self.id = id
+        self.urlString = urlString
+        self.completion = completion
+        self.onFinished = onFinished
         super.init()
+    }
+    
+    func start() {
+        guard let url = URL(string: urlString) else {
+            finish(html: nil, cookies: [], userAgent: nil)
+            return
+        }
+        
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         
@@ -36,19 +49,9 @@ public final class SolverWebViewManager: NSObject, WKNavigationDelegate {
         window.isReleasedWhenClosed = false
         window.orderBack(nil)
         self.window = window
-    }
-    
-    public func solve(urlString: String, completion: @escaping (String?, [HTTPCookie], String?) -> Void) {
-        guard let url = URL(string: urlString) else {
-            completion(nil, [], nil)
-            return
-        }
-        
-        cancelPendingSolve()
-        self.pendingCompletion = completion
         
         let request = URLRequest(url: url)
-        webView?.load(request)
+        webView.load(request)
         
         startPolling(for: url)
     }
@@ -63,7 +66,7 @@ public final class SolverWebViewManager: NSObject, WKNavigationDelegate {
     private func startPolling(for url: URL) {
         // Set a hard timeout of 15 seconds
         let timeoutItem = DispatchWorkItem { [weak self] in
-            self?.finishSolve(status: .timeout)
+            self?.finish(html: nil, cookies: [], userAgent: nil)
         }
         self.solveTimeoutWorkItem = timeoutItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeoutItem)
@@ -74,11 +77,6 @@ public final class SolverWebViewManager: NSObject, WKNavigationDelegate {
                 self?.checkStatus(for: url)
             }
         }
-    }
-    
-    private enum SolveStatus {
-        case solved
-        case timeout
     }
     
     private func checkStatus(for url: URL) {
@@ -103,32 +101,57 @@ public final class SolverWebViewManager: NSObject, WKNavigationDelegate {
                                            html.contains("Checking your browser")
                     
                     if hasClearance || (!isChallengeActive && !html.isEmpty) {
-                        self.finishSolve(status: .solved, html: html, cookies: cookies)
+                        let userAgent = webView.value(forKey: "userAgent") as? String ?? webView.customUserAgent ?? ""
+                        self.finish(html: html, cookies: cookies, userAgent: userAgent)
                     }
                 }
             }
         }
     }
     
-    private func finishSolve(status: SolveStatus, html: String? = nil, cookies: [HTTPCookie] = []) {
+    private func finish(html: String?, cookies: [HTTPCookie], userAgent: String?) {
         cancelPendingSolve()
         
-        let finalHtml = html
-        let finalCookies = cookies
-        let userAgent = webView?.value(forKey: "userAgent") as? String ?? webView?.customUserAgent ?? ""
+        completion(html, cookies, userAgent)
         
-        if let completion = pendingCompletion {
-            completion(finalHtml, finalCookies, userAgent)
-            self.pendingCompletion = nil
+        // Clean up references and window context
+        self.webView?.navigationDelegate = nil
+        self.webView = nil
+        self.window?.contentView = nil
+        self.window?.close()
+        self.window = nil
+        
+        onFinished?()
+        onFinished = nil
+    }
+    
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        finish(html: nil, cookies: [], userAgent: nil)
+    }
+    
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        finish(html: nil, cookies: [], userAgent: nil)
+    }
+}
+
+@MainActor
+public final class SolverWebViewManager: NSObject {
+    public static let shared = SolverWebViewManager()
+    
+    private var activeSessions: [UUID: SolveSession] = [:]
+    
+    private override init() {
+        super.init()
+    }
+    
+    public func solve(urlString: String, completion: @escaping (String?, [HTTPCookie], String?) -> Void) {
+        let sessionId = UUID()
+        let session = SolveSession(id: sessionId, urlString: urlString, completion: completion) { [weak self] in
+            guard let self = self else { return }
+            self.activeSessions[sessionId] = nil
         }
-    }
-    
-    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        finishSolve(status: .timeout)
-    }
-    
-    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        finishSolve(status: .timeout)
+        activeSessions[sessionId] = session
+        session.start()
     }
 }
 

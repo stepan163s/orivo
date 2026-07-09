@@ -1,11 +1,97 @@
 import Foundation
 import Network
 
+private struct SendableConnection: @unchecked Sendable {
+    let connection: NWConnection
+}
+
+private final class ConfigConnectionHandler: @unchecked Sendable {
+    private let connection: NWConnection
+    private let queue: DispatchQueue
+    private var buffer = Data()
+    private let onComplete: @Sendable (Data) -> Void
+    private let onError: @Sendable (Error) -> Void
+    
+    init(connection: NWConnection, queue: DispatchQueue, onComplete: @escaping @Sendable (Data) -> Void, onError: @escaping @Sendable (Error) -> Void) {
+        self.connection = connection
+        self.queue = queue
+        self.onComplete = onComplete
+        self.onError = onError
+    }
+    
+    func start() {
+        connection.start(queue: queue)
+        readNext()
+    }
+    
+    func cancel() {
+        connection.cancel()
+    }
+    
+    private func readNext() {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                self.onError(error)
+                return
+            }
+            
+            if let data = data, !data.isEmpty {
+                self.buffer.append(data)
+                self.checkBuffer()
+            } else if isComplete {
+                self.onComplete(self.buffer)
+            } else {
+                self.onError(NSError(domain: "ConfigConnectionHandler", code: -2, userInfo: [NSLocalizedDescriptionKey: "Connection closed unexpectedly"]))
+                self.connection.cancel()
+            }
+        }
+    }
+    
+    private func checkBuffer() {
+        // HTTP double line ending separator
+        guard let separatorRange = buffer.range(of: Data([13, 10, 13, 10])) else {
+            readNext()
+            return
+        }
+        
+        // Parse Content-Length header to determine full payload bounds
+        let headersData = buffer.subdata(in: 0..<separatorRange.lowerBound)
+        guard let headersString = String(data: headersData, encoding: .utf8) else {
+            self.onError(NSError(domain: "ConfigConnectionHandler", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP headers encoding"]))
+            return
+        }
+        
+        var contentLength = 0
+        let lines = headersString.components(separatedBy: "\r\n")
+        for line in lines {
+            let parts = line.components(separatedBy: ":")
+            if parts.count >= 2 && parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
+                if let parsedLength = Int(parts[1].trimmingCharacters(in: .whitespaces)) {
+                    contentLength = parsedLength
+                    break
+                }
+            }
+        }
+        
+        let totalRequiredBytes = separatorRange.upperBound + contentLength
+        if buffer.count >= totalRequiredBytes {
+            let fullRequest = buffer.subdata(in: 0..<totalRequiredBytes)
+            onComplete(fullRequest)
+        } else {
+            readNext()
+        }
+    }
+}
+
 public final class ConfigServer: @unchecked Sendable {
     public static let shared = ConfigServer()
     
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "com.orivo.configserver", qos: .background)
+    private var activeHandlers: [UUID: ConfigConnectionHandler] = [:]
+    private let handlerLock = NSLock()
     
     private init() {}
     
@@ -43,27 +129,60 @@ public final class ConfigServer: @unchecked Sendable {
     public func stop() {
         listener?.cancel()
         listener = nil
+        handlerLock.lock()
+        activeHandlers.removeAll()
+        handlerLock.unlock()
         LogManager.shared.log(serviceId: "system", text: "Auto-config server stopped.")
     }
     
     private func handleConnection(_ connection: NWConnection) {
-        connection.start(queue: queue)
-        // Larger buffer for proxied Jackett responses
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, error in
-            guard let data = data, !data.isEmpty else {
-                connection.cancel()
-                return
+        let handlerId = UUID()
+        let wrappedConnection = SendableConnection(connection: connection)
+        let handler = ConfigConnectionHandler(
+            connection: connection,
+            queue: queue,
+            onComplete: { [weak self, wrappedConnection, handlerId] fullData in
+                Task { [weak self, wrappedConnection] in
+                    await self?.processRequest(fullData, connection: wrappedConnection)
+                }
+                self?.removeHandler(id: handlerId)
+            },
+            onError: { [weak self, wrappedConnection, handlerId] error in
+                LogManager.shared.log(serviceId: "system", text: "ConfigServer stream error: \(error.localizedDescription)", isError: true)
+                wrappedConnection.connection.cancel()
+                self?.removeHandler(id: handlerId)
             }
-            Task {
-                await self?.processRequest(data, connection: connection)
-            }
-        }
+        )
+        
+        handlerLock.lock()
+        activeHandlers[handlerId] = handler
+        handlerLock.unlock()
+        
+        handler.start()
     }
     
-    private func processRequest(_ data: Data, connection: NWConnection) async {
-        let request = String(data: data, encoding: .utf8) ?? ""
-        let lines = request.components(separatedBy: "\r\n")
-        guard let firstLine = lines.first else { connection.cancel(); return }
+    private func removeHandler(id: UUID) {
+        handlerLock.lock()
+        activeHandlers[id] = nil
+        handlerLock.unlock()
+    }
+    
+    private func processRequest(_ data: Data, connection wrapped: SendableConnection) async {
+        let connection = wrapped.connection
+        
+        guard let separatorRange = data.range(of: Data([13, 10, 13, 10])) else {
+            connection.cancel()
+            return
+        }
+        
+        let headersData = data.subdata(in: 0..<separatorRange.lowerBound)
+        guard let headersString = String(data: headersData, encoding: .utf8) else {
+            connection.cancel()
+            return
+        }
+        
+        let headerLines = headersString.components(separatedBy: "\r\n")
+        guard let firstLine = headerLines.first else { connection.cancel(); return }
         
         let parts = firstLine.components(separatedBy: " ")
         guard parts.count >= 2 else { connection.cancel(); return }
@@ -73,14 +192,49 @@ public final class ConfigServer: @unchecked Sendable {
         
         LogManager.shared.log(serviceId: "system", text: "ConfigServer: Received \(method) request for \(path)")
         
-        // Handle CORS preflight so WebKit doesn't block the request
+        // Handle CORS preflight
         if method == "OPTIONS" {
             sendPreflightResponse(connection: connection)
             return
         }
         
+        // Parse Content-Length to slice the body exactly
+        var contentLength = 0
+        for line in headerLines.dropFirst() {
+            let components = line.components(separatedBy: ":")
+            if components.count >= 2 && components[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
+                if let parsedLength = Int(components[1].trimmingCharacters(in: .whitespaces)) {
+                    contentLength = parsedLength
+                    break
+                }
+            }
+        }
+        
+        // Extract the exact body data
+        let bodyData: Data?
+        if contentLength > 0 {
+            let bodyStart = separatorRange.upperBound
+            let bodyEnd = min(bodyStart + contentLength, data.count)
+            bodyData = data.subdata(in: bodyStart..<bodyEnd)
+        } else {
+            bodyData = nil
+        }
+        
         let (settings, torrPort, jackettPort) = await MainActor.run {
             (SettingsManager.shared.settings, ServiceManager.shared.resolvedTorrServerPort, ServiceManager.shared.resolvedJackettPort)
+        }
+        
+        var headersToForward: [String: String] = [:]
+        for line in headerLines.dropFirst() {
+            let components = line.components(separatedBy: ":")
+            if components.count >= 2 {
+                let key = components[0].trimmingCharacters(in: .whitespaces)
+                let val = components.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespaces)
+                let lowerKey = key.lowercased()
+                if lowerKey != "host" && lowerKey != "connection" && lowerKey != "accept-encoding" {
+                    headersToForward[key] = val
+                }
+            }
         }
         
         // CORS proxy: forward /jackett/* → http://127.0.0.1:resolvedJackettPort/* (or external host)
@@ -89,8 +243,24 @@ public final class ConfigServer: @unchecked Sendable {
             let upstreamBase = (settings.useExternalServers && !settings.externalJackettHost.isEmpty)
                 ? settings.externalJackettHost
                 : "http://127.0.0.1:\(jackettPort)"
-            let jackettURL = upstreamBase + (jackettPath.isEmpty ? "/" : jackettPath)
-            proxyToJackett(urlString: jackettURL, connection: connection)
+            var jackettURL = upstreamBase + (jackettPath.isEmpty ? "/" : jackettPath)
+            
+            // Resolve the real key on the async path and replace/inject it
+            let realKey = await JackettClient.shared.getJackettAPIKey()
+            if !realKey.isEmpty {
+                if jackettURL.contains("apikey=") {
+                    let pattern = "apikey=[^&]+"
+                    if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                        let range = NSRange(jackettURL.startIndex..<jackettURL.endIndex, in: jackettURL)
+                        jackettURL = regex.stringByReplacingMatches(in: jackettURL, options: [], range: range, withTemplate: "apikey=\(realKey)")
+                    }
+                } else if jackettURL.contains("/results") || jackettURL.contains("/api/v2.0") {
+                    let separator = jackettURL.contains("?") ? "&" : "?"
+                    jackettURL += "\(separator)apikey=\(realKey)"
+                }
+            }
+            
+            proxyRequest(urlString: jackettURL, method: method, headers: headersToForward, body: bodyData, connection: connection)
             return
         }
         
@@ -101,7 +271,7 @@ public final class ConfigServer: @unchecked Sendable {
                 ? settings.externalTorrServerHost
                 : "http://127.0.0.1:\(torrPort)"
             let torrURL = upstreamBase + (torrPath.isEmpty ? "/" : torrPath)
-            proxyRequest(urlString: torrURL, connection: connection)
+            proxyRequest(urlString: torrURL, method: method, headers: headersToForward, body: bodyData, connection: connection)
             return
         }
         
@@ -115,12 +285,9 @@ public final class ConfigServer: @unchecked Sendable {
         sendTextResponse(body: "{\"status\": \"online\", \"version\": \"1.0\"}", contentType: "application/json", connection: connection)
     }
     
-    // MARK: - CORS proxy for Jackett
+    // MARK: - CORS proxy forwarding
     
-    private func proxyToJackett(urlString: String, connection: NWConnection) {
-        proxyRequest(urlString: urlString, connection: connection)
-    }
-    private func proxyRequest(urlString: String, connection: NWConnection) {
+    private func proxyRequest(urlString: String, method: String, headers: [String: String], body: Data?, connection: NWConnection) {
         // Pre-encode raw square brackets to prevent Swift's URL(string:) from triggering double-encoding
         let cleanURLString = urlString
             .replacingOccurrences(of: "[", with: "%5B")
@@ -131,13 +298,22 @@ public final class ConfigServer: @unchecked Sendable {
             return
         }
         
-        LogManager.shared.log(serviceId: "system", text: "ConfigServer: Proxying to upstream URL: \(urlString)")
+        LogManager.shared.log(serviceId: "system", text: "ConfigServer: Proxying \(method) to upstream URL: \(urlString)")
         
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = method
+        for (key, val) in headers {
+            urlRequest.setValue(val, forHTTPHeaderField: key)
+        }
+        if let body = body, !body.isEmpty && method != "GET" && method != "HEAD" {
+            urlRequest.httpBody = body
+        }
+        
+        let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in
             if let error = error {
                 LogManager.shared.log(serviceId: "system", text: "ConfigServer: Proxy error: \(error.localizedDescription) for \(urlString)", isError: true)
-                let body = "{\"error\": \"\(error.localizedDescription)\"}"
-                self.sendTextResponse(body: body, contentType: "application/json", connection: connection)
+                let bodyStr = "{\"error\": \"\(error.localizedDescription)\"}"
+                self.sendTextResponse(body: bodyStr, contentType: "application/json", connection: connection)
                 return
             }
             
@@ -222,6 +398,11 @@ public final class ConfigServer: @unchecked Sendable {
     // MARK: - Legacy JS helper
     
     private func buildOrivoJS() -> String {
+        let (configPort, _) = MainActor.assumeIsolated {
+            (ServiceManager.shared.resolvedConfigServerPort, ServiceManager.shared.resolvedTorrServerPort)
+        }
+        let torrserverURL = "http://127.0.0.1:\(configPort)/torrserver"
+        
         return """
         (function () {
             function configure() {
@@ -230,7 +411,7 @@ public final class ConfigServer: @unchecked Sendable {
                     var key = keys[i];
                     var data = {};
                     try { var raw = localStorage.getItem(key); if (raw) data = JSON.parse(raw); } catch(e) {}
-                    data.torrserver_url = 'http://127.0.0.1:8090';
+                    data.torrserver_url = '\(torrserverURL)';
                     data.torrserver_use = true;
                     data.parser_use = true;
                     data.parser_jackett = true;

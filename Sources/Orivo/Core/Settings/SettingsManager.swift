@@ -26,6 +26,40 @@ public final class SettingsManager: ObservableObject {
                 let data = try Data(contentsOf: configURL)
                 let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
                 self.settings = decoded
+                
+                // Migrate credentials from settings.json if present
+                var needsSave = false
+                if let rawJSON = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                    let sensitiveKeys = [
+                        "externalJackettApiKey",
+                        "cubToken",
+                        "tmdbApiKey",
+                        "traktToken",
+                        "traktClientSecret",
+                        "kinoriumToken"
+                    ]
+                    
+                    for key in sensitiveKeys {
+                        if let plaintextVal = rawJSON[key] as? String, !plaintextVal.isEmpty {
+                            if KeychainHelper.shared.load(key: key) == nil {
+                                KeychainHelper.shared.save(key: key, value: plaintextVal)
+                            }
+                            needsSave = true
+                        }
+                    }
+                }
+                
+                // Load credentials from Keychain
+                self.settings.externalJackettApiKey = KeychainHelper.shared.load(key: "externalJackettApiKey") ?? ""
+                self.settings.cubToken = KeychainHelper.shared.load(key: "cubToken") ?? ""
+                self.settings.tmdbApiKey = KeychainHelper.shared.load(key: "tmdbApiKey") ?? ""
+                self.settings.traktToken = KeychainHelper.shared.load(key: "traktToken") ?? ""
+                self.settings.traktClientSecret = KeychainHelper.shared.load(key: "traktClientSecret") ?? ""
+                self.settings.kinoriumToken = KeychainHelper.shared.load(key: "kinoriumToken") ?? ""
+                
+                if needsSave {
+                    saveSettings() // This will rewrite settings.json without plaintext secrets
+                }
             } catch {
                 LogManager.shared.log(serviceId: "system", text: "Failed to load settings: \(error.localizedDescription)", isError: true)
                 self.settings = .defaultSettings
@@ -39,6 +73,15 @@ public final class SettingsManager: ObservableObject {
     public func saveSettings() {
         let set = settings
         let url = configURL
+        
+        // Save sensitive keys to Keychain
+        KeychainHelper.shared.save(key: "externalJackettApiKey", value: set.externalJackettApiKey)
+        KeychainHelper.shared.save(key: "cubToken", value: set.cubToken)
+        KeychainHelper.shared.save(key: "tmdbApiKey", value: set.tmdbApiKey)
+        KeychainHelper.shared.save(key: "traktToken", value: set.traktToken)
+        KeychainHelper.shared.save(key: "traktClientSecret", value: set.traktClientSecret)
+        KeychainHelper.shared.save(key: "kinoriumToken", value: set.kinoriumToken)
+        
         DispatchQueue.global(qos: .utility).async {
             if let data = try? JSONEncoder().encode(set) {
                 try? data.write(to: url, options: .atomic)

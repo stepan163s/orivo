@@ -149,6 +149,7 @@ public struct BufferingOverlayView: View {
         statusTimer = nil
     }
     
+    @MainActor
     private func queryStatus() {
         Task {
             do {
@@ -161,25 +162,19 @@ public struct BufferingOverlayView: View {
                 self.peersCount = statusResponse.active_peers ?? 0
                 self.totalPeers = statusResponse.total_peers ?? 0
                 
-                switch statusResponse.status {
-                case 1:
-                    self.statusString = "Поиск пиров..."
-                case 2:
-                    self.statusString = "Буферизация..."
-                case 3:
-                    // Preload complete! Play video!
+                if statusResponse.status == 3 || statusResponse.bufferingProgress >= 1.0 {
                     self.statusString = "Готово"
                     stopTimer()
                     playVideo()
-                default:
-                    self.statusString = "Подключение..."
-                }
-                
-                // Fallback: if progress hits 100%, trigger play
-                if statusResponse.bufferingProgress >= 1.0 {
-                    LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: progress is 100%, triggering playback fallback")
-                    stopTimer()
-                    playVideo()
+                } else {
+                    switch statusResponse.status {
+                    case 1:
+                        self.statusString = "Поиск пиров..."
+                    case 2:
+                        self.statusString = "Буферизация..."
+                    default:
+                        self.statusString = "Подключение..."
+                    }
                 }
             } catch {
                 LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: TorrServer buffering status check error: \(error.localizedDescription)", isError: true)

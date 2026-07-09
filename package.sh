@@ -108,8 +108,8 @@ if [ -n "$NOTARY_PROFILE" ] && [ -n "$SIGN_IDENTITY" ]; then
     # Submit to Apple
     xcrun notarytool submit "$DMG_NAME" --keychain-profile "$NOTARY_PROFILE" --wait
     
-    echo "=== Step 6: Stapling Notarization Ticket to DMG ==="
-    xcrun notarytool staple "$DMG_NAME"
+    # stapler is the correct tool to staple a ticket, not notarytool
+    xcrun stapler staple "$DMG_NAME"
     
     echo "Verifying stapling result..."
     spctl --assess -a -t open --context context:primary-signature --verbose "$DMG_NAME"

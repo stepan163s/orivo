@@ -85,9 +85,16 @@ public final class MenuBarController: NSObject {
     }
     
     @objc private func openLibraryClicked() {
-        if let url = URL(string: "https://lampa.mx/") {
-            NSWorkspace.shared.open(url)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        for window in NSApp.windows {
+            if window.title == "Library" {
+                window.makeKeyAndOrderFront(nil)
+                return
+            }
         }
+        NotificationCenter.default.post(name: NSNotification.Name("OpenLibraryWindow"), object: nil)
     }
     
     @objc private func restartClicked() {
@@ -100,12 +107,7 @@ public final class MenuBarController: NSObject {
     
     @objc private func checkUpdatesClicked() {
         LogManager.shared.log(serviceId: "system", text: "Checking for Orivo system service updates...")
-        // Just log updates check for now
-        EventBus.shared.post(.message(
-            title: "Orivo Update",
-            body: "Orivo is up to date.",
-            isWarning: false
-        ))
+        OrivoUpdater.shared.checkForUpdates()
     }
     
     @objc private func quitClicked() {

@@ -1,8 +1,8 @@
 import SwiftUI
 
 public struct DashboardView: View {
-    @ObservedObject var serviceManager = ServiceManager.shared
-    @ObservedObject var loc = LocalizationManager.shared
+    @StateObject private var serviceManager = ServiceManager.shared
+    @StateObject private var loc = LocalizationManager.shared
     @Environment(\.openWindow) private var openWindow
     
     @Binding var showSettings: Bool

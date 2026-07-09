@@ -6,19 +6,19 @@
     <description>Most recent updates for Orivo.</description>
     <language>ru</language>
     <item>
-      <title>Orivo 1.1.1 (Release)</title>
-      <pubDate>Mon, 06 Jul 2026 13:58:00 +0400</pubDate>
+      <title>Orivo 1.1.2 (Release)</title>
+      <pubDate>Thu, 09 Jul 2026 14:59:00 +0400</pubDate>
       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
-        <h2>Что нового в Orivo 1.1.1:</h2>
+        <h2>Что нового в Orivo 1.1.2:</h2>
         <ul>
-          <li>Интеграция Sparkle Framework для автоматических обновлений.</li>
-          <li>Оптимизация скорости предзагрузки страниц деталей фильмов.</li>
-          <li>Плавные кинематографичные переходы без скачков интерфейса.</li>
-          <li>Исправлена шкала загрузки, скорость и число пиров в TorrServer overlay.</li>
+          <li>Полный продакшн-аудит и рефакторинг безопасности.</li>
+          <li>Безопасное шифрование токенов и API ключей в связке ключей macOS Keychain.</li>
+          <li>Исправление зависаний плеера при переопределении портов TorrServer.</li>
+          <li>Оптимизация сетевых запросов и стабильности соединения.</li>
         </ul>
       ]]></description>
-      <enclosure url="https://github.com/stepan163s/orivo/releases/download/v1.1.1/Orivo.dmg" sparkle:version="1.1.1" sparkle:shortVersionString="1.1.1" length="34223197" type="application/octet-stream" sparkle:edSignature="V0l/AtSR5LWz3olmgyCveqxS3MdCdffldlwp7RqHrcv5P2zsLnlTYwZ0hwarWnQMF4RtgwqIWDiMwNTdzr4cBw==" />
+      <enclosure url="https://github.com/stepan163s/orivo/releases/download/v1.1.2/Orivo.dmg" sparkle:version="1.1.2" sparkle:shortVersionString="1.1.2" length="34240033" type="application/octet-stream" sparkle:edSignature="DMvBcKyN7U6j0p7ucGgjzPwdMtxDvcQVLqHS5BacA3bzug6sW9UZTmrf2tHZk6/Dh6r70M2H8Pltsf+lsKInCg==" />
     </item>
   </channel>
 </rss>

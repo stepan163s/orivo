@@ -84,7 +84,7 @@ public final class JackettClient: Sendable {
     
     private init() {}
     
-    private func getJackettAPIKey() async -> String {
+    public func getJackettAPIKey() async -> String {
         return await MainActor.run {
             let settings = SettingsManager.shared.settings
             if settings.useExternalServers {

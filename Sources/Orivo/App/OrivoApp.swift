@@ -26,8 +26,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ConfigServer.shared.start()
         SolverServer.shared.start()
         
-        let hasTorr = ServiceManager.shared.isBinaryInstalled(service: ServiceManager.shared.services[0])
-        let hasJackett = ServiceManager.shared.isBinaryInstalled(service: ServiceManager.shared.services[1])
+        let hasTorr = ServiceManager.shared.service(id: "torrserver").map { ServiceManager.shared.isBinaryInstalled(service: $0) } ?? false
+        let hasJackett = ServiceManager.shared.service(id: "jackett").map { ServiceManager.shared.isBinaryInstalled(service: $0) } ?? false
         if hasTorr && hasJackett {
             ServiceManager.shared.startAllAutoStartServices()
             Watchdog.shared.startMonitoring()
@@ -78,9 +78,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         if window.title == "Orivo" || window.title == "Library" {
-            // Check if there are any other visible main windows
-            let visibleWindows = NSApp.windows.filter { $0.isVisible && ($0.title == "Orivo" || $0.title == "Library") }
-            if visibleWindows.isEmpty {
+            // Check if there are any other visible main windows, excluding the one currently closing
+            let otherVisible = NSApp.windows.filter { $0 !== window && $0.isVisible && ($0.title == "Orivo" || $0.title == "Library") }
+            if otherVisible.isEmpty {
                 let quitOnClose = SettingsManager.shared.settings.quitOnClose
                 if quitOnClose {
                     NSApp.terminate(nil)
@@ -99,9 +99,8 @@ struct OrivoApp: App {
     
     @State private var isOnboardingCompleted: Bool = {
         let serviceManager = ServiceManager.shared
-        guard serviceManager.services.count >= 2 else { return false }
-        let hasTorr = serviceManager.isBinaryInstalled(service: serviceManager.services[0])
-        let hasJackett = serviceManager.isBinaryInstalled(service: serviceManager.services[1])
+        let hasTorr = serviceManager.service(id: "torrserver").map { serviceManager.isBinaryInstalled(service: $0) } ?? false
+        let hasJackett = serviceManager.service(id: "jackett").map { serviceManager.isBinaryInstalled(service: $0) } ?? false
         return hasTorr && hasJackett
     }()
     

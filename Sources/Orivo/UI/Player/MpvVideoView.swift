@@ -11,50 +11,20 @@ private func glViewport(_ x: Int32, _ y: Int32, _ width: Int32, _ height: Int32)
 
 private let GL_FRAMEBUFFER_BINDING: UInt32 = 0x8CA6
 
-public class MpvVideoView: NSOpenGLView {
-    private var player: MpvPlayer?
-    nonisolated(unsafe) private var displayLink: CVDisplayLink?
+private final class MpvGLView: NSOpenGLView {
+    private weak var parent: MpvVideoView?
     
-    public init() {
-        let attrs: [NSOpenGLPixelFormatAttribute] = [
-            UInt32(NSOpenGLPFADoubleBuffer),
-            UInt32(NSOpenGLPFAColorSize), 24,
-            UInt32(NSOpenGLPFAAlphaSize), 8,
-            UInt32(NSOpenGLPFADepthSize), 24,
-            UInt32(NSOpenGLPFAOpenGLProfile), UInt32(NSOpenGLProfileVersion3_2Core),
-            0
-        ]
-        guard let pf = NSOpenGLPixelFormat(attributes: attrs) else {
-            super.init(frame: .zero, pixelFormat: nil)!
-            return
-        }
-        super.init(frame: .zero, pixelFormat: pf)!
-        
-        self.wantsLayer = true
+    init?(pixelFormat pf: NSOpenGLPixelFormat, parent: MpvVideoView) {
+        self.parent = parent
+        super.init(frame: .zero, pixelFormat: pf)
         self.wantsBestResolutionOpenGLSurface = true
     }
     
     required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        self.wantsLayer = true
-        self.wantsBestResolutionOpenGLSurface = true
+        fatalError("init(coder:) has not been implemented")
     }
     
-    public func setPlayer(_ player: MpvPlayer) {
-        self.player = player
-        
-        if let glContext = self.openGLContext {
-            player.setupRenderContext(glContext: glContext)
-        }
-        
-        player.onRenderUpdate = { [weak self] in
-            DispatchQueue.main.async {
-                self?.needsDisplay = true
-            }
-        }
-    }
-    
-    public override func prepareOpenGL() {
+    override func prepareOpenGL() {
         super.prepareOpenGL()
         if let glContext = self.openGLContext {
             glContext.makeCurrentContext()
@@ -63,8 +33,8 @@ public class MpvVideoView: NSOpenGLView {
         }
     }
     
-    public override func draw(_ dirtyRect: NSRect) {
-        guard let glContext = self.openGLContext, let player = player else {
+    override func draw(_ dirtyRect: NSRect) {
+        guard let glContext = self.openGLContext, let parent = parent, let player = parent.player else {
             super.draw(dirtyRect)
             return
         }
@@ -84,11 +54,60 @@ public class MpvVideoView: NSOpenGLView {
         
         glContext.flushBuffer()
     }
+}
+
+public class MpvVideoView: NSView {
+    fileprivate var player: MpvPlayer?
+    private var glView: MpvGLView?
     
-    public override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        // CVDisplayLink is disabled to avoid flooding the main runloop with async redraw calls at 60Hz/120Hz.
-        // We rely solely on the reactive player.onRenderUpdate callback which triggers only when new decoded frames are ready.
+    public init() {
+        super.init(frame: .zero)
+        self.wantsLayer = true
+        
+        let attrs: [NSOpenGLPixelFormatAttribute] = [
+            UInt32(NSOpenGLPFADoubleBuffer),
+            UInt32(NSOpenGLPFAColorSize), 24,
+            UInt32(NSOpenGLPFAAlphaSize), 8,
+            UInt32(NSOpenGLPFADepthSize), 24,
+            UInt32(NSOpenGLPFAOpenGLProfile), UInt32(NSOpenGLProfileVersion3_2Core),
+            0
+        ]
+        
+        if let pf = NSOpenGLPixelFormat(attributes: attrs) {
+            if let glView = MpvGLView(pixelFormat: pf, parent: self) {
+                glView.autoresizingMask = [.width, .height]
+                self.addSubview(glView)
+                self.glView = glView
+            }
+        }
+        
+        if self.glView == nil {
+            LogManager.shared.log(serviceId: "system", text: "MpvVideoView error: Failed to initialize OpenGL context. Video rendering will be unavailable.", isError: true)
+        }
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        self.wantsLayer = true
+    }
+    
+    public override func layout() {
+        super.layout()
+        glView?.frame = self.bounds
+    }
+    
+    public func setPlayer(_ player: MpvPlayer) {
+        self.player = player
+        
+        if let glView = self.glView, let glContext = glView.openGLContext {
+            player.setupRenderContext(glContext: glContext)
+        }
+        
+        player.onRenderUpdate = { [weak self] in
+            DispatchQueue.main.async {
+                self?.glView?.needsDisplay = true
+            }
+        }
     }
     
     deinit {

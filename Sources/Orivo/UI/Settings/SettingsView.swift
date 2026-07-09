@@ -1,10 +1,10 @@
 import SwiftUI
 
 public struct SettingsView: View {
-    @ObservedObject var settingsManager = SettingsManager.shared
-    @ObservedObject var serviceManager = ServiceManager.shared
-    @ObservedObject var loc = LocalizationManager.shared
-    @ObservedObject var updater = OrivoUpdater.shared
+    @StateObject private var settingsManager = SettingsManager.shared
+    @StateObject private var serviceManager = ServiceManager.shared
+    @StateObject private var loc = LocalizationManager.shared
+    @StateObject private var updater = OrivoUpdater.shared
     @Binding var showSettings: Bool
     
     @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
@@ -520,7 +520,7 @@ public struct SettingsView: View {
                     Text(loc.tr("mac_ip"))
                         .foregroundColor(.white.opacity(0.8))
                     Spacer()
-                    Text(getLocalIPAddress())
+                    Text(NetworkUtils.getLocalIPAddress())
                         .foregroundColor(.white)
                         .textSelection(.enabled)
                 }
@@ -1408,7 +1408,7 @@ public struct SettingsView: View {
                     Text(loc.tr("mac_ip"))
                         .foregroundColor(OrivoTheme.textSecondary)
                     Spacer()
-                    Text(getLocalIPAddress())
+                    Text(NetworkUtils.getLocalIPAddress())
                         .foregroundColor(OrivoTheme.textPrimary)
                         .textSelection(.enabled)
                 }
@@ -1713,29 +1713,5 @@ public struct SettingsView: View {
         if let url = URL(string: "http://127.0.0.1:\(port)/") {
             NSWorkspace.shared.open(url)
         }
-    }
-    
-    private func getLocalIPAddress() -> String {
-        var address: String = "127.0.0.1"
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0 else { return address }
-        guard let firstAddr = ifaddr else { return address }
-        
-        for ptr in sequence(first: firstAddr, next: { $0.pointee.ifa_next }) {
-            let flags = Int32(ptr.pointee.ifa_flags)
-            var addr = ptr.pointee.ifa_addr.pointee
-            
-            if addr.sa_family == UInt8(AF_INET) {
-                if (flags & IFF_UP) != 0 && (flags & IFF_LOOPBACK) == 0 {
-                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    if getnameinfo(&addr, socklen_t(addr.sa_len), &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST) == 0 {
-                        address = String(cString: hostname)
-                        break
-                    }
-                }
-            }
-        }
-        freeifaddrs(ifaddr)
-        return address
     }
 }

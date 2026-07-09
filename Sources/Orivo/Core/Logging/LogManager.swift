@@ -8,6 +8,7 @@ public final class LogManager: @unchecked Sendable {
     private var inMemoryLogs: [String: [String]] = [:] // serviceId -> list of log lines
     private let maxMemoryLines = 5000
     private var fileHandles: [String: FileHandle] = [:]
+    nonisolated(unsafe) private static let dateFormatter = ISO8601DateFormatter()
     
     private init() {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
@@ -21,7 +22,7 @@ public final class LogManager: @unchecked Sendable {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         
-        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let timestamp = Self.dateFormatter.string(from: Date())
         let typeStr = isError ? "[ERROR]" : "[INFO]"
         let line = "[\(timestamp)] \(typeStr) \(cleanText)"
         
@@ -64,6 +65,11 @@ public final class LogManager: @unchecked Sendable {
             rotateLog(serviceId: serviceId, fileURL: fileURL)
         }
         
+        writeToDiskDirect(serviceId: serviceId, line: line)
+    }
+    
+    private func writeToDiskDirect(serviceId: String, line: String) {
+        let fileURL = logDirectory.appendingPathComponent("\(serviceId).log")
         if fileHandles[serviceId] == nil {
             if !FileManager.default.fileExists(atPath: fileURL.path) {
                 FileManager.default.createFile(atPath: fileURL.path, contents: nil)
@@ -87,18 +93,31 @@ public final class LogManager: @unchecked Sendable {
         fileHandles[serviceId] = nil
         
         // Keep last 2000 lines
+        let timestamp = Self.dateFormatter.string(from: Date())
         if let content = try? String(contentsOf: fileURL, encoding: .utf8) {
             let lines = content.components(separatedBy: "\n")
             let kept = lines.suffix(2000).joined(separator: "\n")
-            let header = "--- Log rotated at \(ISO8601DateFormatter().string(from: Date())) (kept last 2000 lines) ---\n"
+            let header = "--- Log rotated at \(timestamp) (kept last 2000 lines) ---\n"
             try? (header + kept).write(to: fileURL, atomically: true, encoding: .utf8)
         }
         
-        LogManager.shared.log(serviceId: "system", text: "Log file rotated for service: \(serviceId)")
+        // Directly append to system memory logs and write to disk without calling LogManager.shared.log()
+        // to avoid infinite recursive call loops if the system log is being rotated.
+        let infoLine = "[\(timestamp)] [INFO] Log file rotated for service: \(serviceId)"
+        
+        var current = self.inMemoryLogs["system"] ?? []
+        current.append(infoLine)
+        if current.count > self.maxMemoryLines {
+            current.removeFirst(current.count - self.maxMemoryLines)
+        }
+        self.inMemoryLogs["system"] = current
+        
+        EventBus.shared.post(.logReceived(serviceId: "system", text: infoLine, isError: false))
+        writeToDiskDirect(serviceId: "system", line: infoLine + "\n")
     }
     
     public func closeAllHandles() {
-        queue.sync {
+        queue.sync(flags: .barrier) {
             for (serviceId, handle) in fileHandles {
                 try? handle.close()
                 fileHandles[serviceId] = nil

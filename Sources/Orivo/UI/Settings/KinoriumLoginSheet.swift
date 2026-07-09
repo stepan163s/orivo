@@ -48,6 +48,7 @@ struct KinoriumWebView: NSViewRepresentable {
     
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
         
         // Inject JS bridge to capture console logs and window errors
         let source = """
@@ -89,11 +90,6 @@ struct KinoriumWebView: NSViewRepresentable {
         
         // Set standard macOS Safari User Agent to prevent Google OAuth block
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-        
-        // Clean session cookies to guarantee a fresh login prompt
-        WKWebsiteDataStore.default().fetchDataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()) { records in
-            WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), for: records, completionHandler: {})
-        }
         
         let request = URLRequest(url: url)
         webView.load(request)

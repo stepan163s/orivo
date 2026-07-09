@@ -34,12 +34,15 @@ public struct LibraryWebView: NSViewRepresentable {
         let configPort = ServiceManager.shared.resolvedConfigServerPort
         let torrPort = ServiceManager.shared.resolvedTorrServerPort
         
-        let jackettKey = settings.useExternalServers ? settings.externalJackettApiKey : getLocalJackettAPIKey()
+        let rawKey = settings.useExternalServers ? settings.externalJackettApiKey : getLocalJackettAPIKey()
         let isExternalLampa = settings.useExternalServers && !settings.externalLampaURL.isEmpty
         
         let jackettProxyBase = isExternalLampa 
             ? (settings.externalJackettHost.isEmpty ? "http://127.0.0.1:\(configPort)/jackett" : settings.externalJackettHost) 
             : "http://127.0.0.1:\(configPort)/jackett"
+            
+        let isProxied = jackettProxyBase.contains("127.0.0.1") || jackettProxyBase.contains("localhost")
+        let jackettKey = isProxied ? "orivo_secured_key" : rawKey
             
         let torrserverURL = isExternalLampa 
             ? (settings.externalTorrServerHost.isEmpty ? "http://127.0.0.1:\(torrPort)" : settings.externalTorrServerHost) 

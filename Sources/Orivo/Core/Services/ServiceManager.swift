@@ -314,6 +314,10 @@ public final class ServiceManager: ObservableObject {
             .store(in: &cancellables)
     }
     
+    public func service(id: String) -> Service? {
+        return services.first(where: { $0.id == id })
+    }
+    
     private func configureJackettFlareSolverr() {
         let fileManager = FileManager.default
         let home = fileManager.homeDirectoryForCurrentUser

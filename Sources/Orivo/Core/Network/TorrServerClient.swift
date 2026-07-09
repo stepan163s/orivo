@@ -134,6 +134,11 @@ public final class TorrServerClient: Sendable {
         for attempt in 1...3 {
             do {
                 let (data, response) = try await URLSession.shared.data(for: urlRequest)
+                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+                    let bodyStr = String(data: data, encoding: .utf8) ?? ""
+                    LogManager.shared.log(serviceId: "system", text: "TorrServer returned status \(httpResponse.statusCode) for \(endpoint), body: \(bodyStr)", isError: true)
+                    throw URLError(.badServerResponse)
+                }
                 guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                     throw URLError(.badServerResponse)
                 }
@@ -157,16 +162,20 @@ public final class TorrServerClient: Sendable {
     }
     
     public func getTorrentStatus(hash: String) async throws -> TorrServerStatusResponse {
-        let req = TorrServerRequest(action: "stat", hash: hash)
+        let req = TorrServerRequest(action: "get", hash: hash)
         return try await post(endpoint: "/torrents", request: req)
     }
     
     @MainActor
     public func getPlayURL(hash: String, fileIndex: Int, filename: String) -> String {
         let settings = SettingsManager.shared.settings
-        let base = (settings.useExternalServers && !settings.externalTorrServerHost.isEmpty)
-            ? settings.externalTorrServerHost
-            : settings.torrserverHost
+        let base: String
+        if settings.useExternalServers && !settings.externalTorrServerHost.isEmpty {
+            base = settings.externalTorrServerHost
+        } else {
+            let port = ServiceManager.shared.resolvedTorrServerPort
+            base = "http://127.0.0.1:\(port)"
+        }
             
         guard let escapedFilename = filename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             return "\(base)/stream/?link=\(hash)&index=\(fileIndex)&play"

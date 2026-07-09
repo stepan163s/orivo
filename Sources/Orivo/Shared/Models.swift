@@ -160,6 +160,30 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.kinoriumBypassVPN = kinoriumBypassVPN
     }
     
+    public enum CodingKeys: String, CodingKey {
+        case launchAtLogin
+        case player
+        case theme
+        case openLibraryOnLaunch
+        case quitOnClose
+        case language
+        case torrserverHost
+        case jackettHost
+        case useTorrServer
+        case useJackett
+        case useExternalServers
+        case externalLampaURL
+        case externalTorrServerHost
+        case externalJackettHost
+        case cubEmail
+        case cubProfileID
+        case cubMirrorURL
+        case rezkaMirrorURL
+        case traktClientID
+        case kinoriumEmail
+        case kinoriumBypassVPN
+    }
+    
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
@@ -177,18 +201,18 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.externalLampaURL = try container.decodeIfPresent(String.self, forKey: .externalLampaURL) ?? ""
         self.externalTorrServerHost = try container.decodeIfPresent(String.self, forKey: .externalTorrServerHost) ?? ""
         self.externalJackettHost = try container.decodeIfPresent(String.self, forKey: .externalJackettHost) ?? ""
-        self.externalJackettApiKey = try container.decodeIfPresent(String.self, forKey: .externalJackettApiKey) ?? ""
+        self.externalJackettApiKey = ""
         
-        self.cubToken = try container.decodeIfPresent(String.self, forKey: .cubToken) ?? ""
+        self.cubToken = ""
         self.cubEmail = try container.decodeIfPresent(String.self, forKey: .cubEmail) ?? ""
         self.cubProfileID = try container.decodeIfPresent(String.self, forKey: .cubProfileID) ?? ""
         self.cubMirrorURL = try container.decodeIfPresent(String.self, forKey: .cubMirrorURL) ?? ""
-        self.tmdbApiKey = try container.decodeIfPresent(String.self, forKey: .tmdbApiKey) ?? ""
+        self.tmdbApiKey = ""
         self.rezkaMirrorURL = try container.decodeIfPresent(String.self, forKey: .rezkaMirrorURL) ?? "https://rezka.ag"
-        self.traktToken = try container.decodeIfPresent(String.self, forKey: .traktToken) ?? ""
+        self.traktToken = ""
         self.traktClientID = try container.decodeIfPresent(String.self, forKey: .traktClientID) ?? ""
-        self.traktClientSecret = try container.decodeIfPresent(String.self, forKey: .traktClientSecret) ?? ""
-        self.kinoriumToken = try container.decodeIfPresent(String.self, forKey: .kinoriumToken) ?? ""
+        self.traktClientSecret = ""
+        self.kinoriumToken = ""
         self.kinoriumEmail = try container.decodeIfPresent(String.self, forKey: .kinoriumEmail) ?? ""
         self.kinoriumBypassVPN = try container.decodeIfPresent(Bool.self, forKey: .kinoriumBypassVPN) ?? false
     }

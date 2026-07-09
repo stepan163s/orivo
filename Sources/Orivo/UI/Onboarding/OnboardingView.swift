@@ -4,7 +4,7 @@ import Combine
 public struct OnboardingView: View {
     @Binding var onboardingCompleted: Bool
     @Environment(\.openWindow) private var openWindow
-    @ObservedObject var loc = LocalizationManager.shared
+    @StateObject private var loc = LocalizationManager.shared
     
     @State private var currentStep = 1 // 1: Welcome, 2: Installing, 3: Done
     @State private var statusText = ""
