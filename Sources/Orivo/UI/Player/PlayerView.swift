@@ -250,89 +250,112 @@ public struct PlayerView: View {
             // Translucent Buffering Overlay
             if isTorrServerBuffering {
                 ZStack {
-                    Color.black.opacity(0.85)
+                    Color.black.opacity(0.8)
                         .ignoresSafeArea()
                     
-                    VStack(spacing: 24) {
-                        VStack(spacing: 8) {
-                            Text(title)
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                                .frame(maxWidth: 400)
-                            Text("Загрузка и буферизация торрента...")
-                                .font(.system(size: 13))
-                                .foregroundColor(.white.opacity(0.5))
-                        }
+                    // Sleek Glassmorphic Buffer Card
+                    ZStack {
+                        VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
+                            .overlay(Color.black.opacity(0.4))
                         
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white.opacity(0.1), lineWidth: 8)
-                                .frame(width: 120, height: 120)
+                        VStack(spacing: 14) {
+                            // Header
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(title)
+                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                        .lineLimit(1)
+                                    Text("Загрузка и буферизация торрента...")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.white.opacity(0.4))
+                                }
+                                Spacer()
+                                
+                                Button(action: {
+                                    bufferTimer?.invalidate()
+                                    bufferTimer = nil
+                                    onClose()
+                                }) {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.6))
+                                        .frame(width: 20, height: 20)
+                                        .background(Color.white.opacity(0.1))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
                             
-                            Circle()
-                                .trim(from: 0.0, to: CGFloat(max(bufferingProgress, 0.001)))
-                                .stroke(
-                                    AngularGradient(
-                                        colors: [.blue, .cyan, .blue],
-                                        center: .center
-                                    ),
-                                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
-                                )
-                                .rotationEffect(Angle(degrees: -90))
-                                .frame(width: 120, height: 120)
-                                .animation(.linear(duration: 0.5), value: bufferingProgress)
-                            
+                            // Horizontal Progress Bar
                             VStack(spacing: 4) {
-                                Text(String(format: "%.0f%%", bufferingProgress * 100))
-                                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        
-                        HStack(spacing: 24) {
-                            VStack {
-                                Text("Скорость")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.4))
-                                Text(bufferingSpeed.isEmpty ? "0 КБ/с" : bufferingSpeed)
-                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
+                                ProgressView(value: bufferingProgress)
+                                    .tint(
+                                        LinearGradient(
+                                            colors: [Color.blue, Color.purple],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .scaleEffect(x: 1, y: 1.5, anchor: .center)
+                                
+                                HStack {
+                                    Text(bufferingProgress >= 0.01 ? "Заполнение буфера..." : "Подключение к пирам...")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.5))
+                                    Spacer()
+                                    Text(String(format: "%.0f%%", bufferingProgress * 100))
+                                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                }
                             }
                             
-                            VStack {
-                                Text("Пиры")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.4))
-                                Text(bufferingPeers.isEmpty ? "0 / 0" : bufferingPeers)
-                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
+                            // Speed & Peers stats row
+                            HStack {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.down.circle")
+                                        .foregroundColor(.blue)
+                                        .font(.system(size: 11))
+                                    Text(bufferingSpeed.isEmpty ? "0 КБ/с" : bufferingSpeed)
+                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.9))
+                                }
+                                
+                                Spacer()
+                                
+                                HStack(spacing: 4) {
+                                    Image(systemName: "person.2")
+                                        .foregroundColor(.purple)
+                                        .font(.system(size: 11))
+                                    Text(bufferingPeers.isEmpty ? "0 / 0" : bufferingPeers)
+                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.9))
+                                }
                             }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.03))
+                            .cornerRadius(6)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(Color.white.opacity(0.04))
-                        .cornerRadius(8)
-                        
-                        Button(action: {
-                            bufferTimer?.invalidate()
-                            bufferTimer = nil
-                            onClose()
-                        }) {
-                            Text("Отмена")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 24)
-                                .padding(.vertical, 8)
-                                .background(Color.red.opacity(0.2))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color.red.opacity(0.4), lineWidth: 1)
-                                )
-                                .cornerRadius(6)
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                        .padding(16)
                     }
+                    .frame(width: 340, height: 130)
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.12),
+                                        Color.white.opacity(0.03)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.3), radius: 15, x: 0, y: 8)
                 }
                 .transition(.opacity)
                 .zIndex(10)
