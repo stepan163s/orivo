@@ -39,7 +39,7 @@ public struct TMDBMedia: Codable, Identifiable, Hashable {
     
     public var posterURL: URL? {
         guard let path = posterPath else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/w342\(path)")
+        return URL(string: "https://image.tmdb.org/t/p/w185\(path)")
     }
     
     public var backdropURL: URL? {
@@ -114,7 +114,7 @@ public struct TMDBMediaDetail: Codable {
     
     public var posterURL: URL? {
         guard let path = posterPath else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/w342\(path)")
+        return URL(string: "https://image.tmdb.org/t/p/w185\(path)")
     }
     
     public var backdropURL: URL? {
@@ -148,7 +148,7 @@ public struct TMDBCast: Codable, Identifiable {
     
     public var profileURL: URL? {
         guard let path = profilePath else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/w185\(path)")
+        return URL(string: "https://image.tmdb.org/t/p/w45\(path)")
     }
     
     enum CodingKeys: String, CodingKey {

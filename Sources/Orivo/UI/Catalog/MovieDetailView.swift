@@ -35,7 +35,7 @@ public struct MovieDetailView: View {
             // Blurred backdrop background
             ZStack {
                 if let details = details {
-                    CachedAsyncImage(url: details.backdropURL) { image in
+                    CachedAsyncImage(url: details.posterURL) { image in
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
@@ -494,6 +494,13 @@ public struct MovieDetailView: View {
         }
     }
     
+    private static let prefetchSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.httpMaximumConnectionsPerHost = 20
+        config.timeoutIntervalForRequest = 10.0
+        return URLSession(configuration: config)
+    }()
+    
     private func preloadImage(url: URL) async throws -> NSImage {
         let startTime = Date()
         if let cached = ImageCache.shared.get(for: url) {
@@ -501,7 +508,7 @@ public struct MovieDetailView: View {
             LogManager.shared.log(serviceId: "system", text: "Preload: \(url.lastPathComponent) resolved from CACHE in \(String(format: "%.1f", duration))ms")
             return cached
         }
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await MovieDetailView.prefetchSession.data(from: url)
         guard let nsImage = NSImage(data: data) else {
             throw URLError(.cannotDecodeContentData)
         }
@@ -518,43 +525,12 @@ public struct MovieDetailView: View {
             let isTV = media.mediaType == "tv" || media.releaseDate == nil
             let fetchedDetails: TMDBMediaDetail
             
-            let jsonStartTime = Date()
             if isTV {
                 fetchedDetails = try await TMDBClient.shared.fetchTVShowDetails(id: media.id)
                 await loadSeasonEpisodes()
             } else {
                 fetchedDetails = try await TMDBClient.shared.fetchMovieDetails(id: media.id)
             }
-            let jsonDuration = Date().timeIntervalSince(jsonStartTime) * 1000
-            LogManager.shared.log(serviceId: "system", text: "Preload: TMDB metadata JSON loaded in \(String(format: "%.1f", jsonDuration))ms")
-            
-            let prefetchStartTime = Date()
-            // Pre-download all critical assets concurrently in a single task group
-            await withTaskGroup(of: Void.self) { group in
-                if let backdropURL = fetchedDetails.backdropURL {
-                    group.addTask {
-                        _ = try? await preloadImage(url: backdropURL)
-                    }
-                }
-                if let posterURL = fetchedDetails.posterURL {
-                    group.addTask {
-                        _ = try? await preloadImage(url: posterURL)
-                    }
-                }
-                // Pre-download first 12 actor profile images
-                if let cast = fetchedDetails.credits?.cast {
-                    for actor in cast.prefix(12) {
-                        if let profileURL = actor.profileURL {
-                            group.addTask {
-                                _ = try? await preloadImage(url: profileURL)
-                            }
-                        }
-                    }
-                }
-            }
-            let prefetchDuration = Date().timeIntervalSince(prefetchStartTime) * 1000
-            LogManager.shared.log(serviceId: "system", text: "Preload: All media assets preloaded concurrently in \(String(format: "%.1f", prefetchDuration))ms")
-            
             let totalDuration = Date().timeIntervalSince(overallStartTime) * 1000
             LogManager.shared.log(serviceId: "system", text: "Preload: TOTAL details load pipeline completed in \(String(format: "%.1f", totalDuration))ms")
             
@@ -566,6 +542,29 @@ public struct MovieDetailView: View {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     self.details = fetchedDetails
                     self.isLoading = false
+                }
+            }
+            
+            // Pre-download all assets in the background (non-blocking)
+            Task {
+                await withTaskGroup(of: Void.self) { group in
+                    // Preload backdrop & poster
+
+                    if let posterURL = fetchedDetails.posterURL {
+                        group.addTask {
+                            _ = try? await preloadImage(url: posterURL)
+                        }
+                    }
+                    // Preload actor avatars
+                    if let cast = fetchedDetails.credits?.cast {
+                        for actor in cast.prefix(12) {
+                            if let profileURL = actor.profileURL {
+                                group.addTask {
+                                    _ = try? await preloadImage(url: profileURL)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         } catch {
