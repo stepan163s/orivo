@@ -60,12 +60,14 @@ public struct MainCatalogView: View {
     
     @StateObject private var library = LibraryManager.shared
     @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
+    @AppStorage("cardTransitionStyle") private var cardTransitionStyle: String = "native"
     @State private var showOrivoAccountAlert = false
     
     public init() {}
     
     public var body: some View {
-        HStack(spacing: 0) {
+        ZStack {
+            HStack(spacing: 0) {
             // Apple TV-Style Vibrancy Sidebar
             VStack(alignment: .leading, spacing: 0) {
                 // Spacer for window control buttons (traffic lights)
@@ -357,8 +359,38 @@ public struct MainCatalogView: View {
                 }
             }
         }
+        
+        if cardTransitionStyle == "overlay", let media = selectedMedia {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .transition(.opacity)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        selectedMedia = nil
+                    }
+                }
+            
+            MovieDetailView(media: media, onClose: {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    selectedMedia = nil
+                }
+            })
+            .frame(width: 800, height: 600)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .cornerRadius(16)
+            .shadow(radius: 20)
+            .transition(.asymmetric(
+                insertion: .move(edge: .bottom).combined(with: .opacity),
+                removal: .move(edge: .bottom).combined(with: .opacity)
+            ))
+            .zIndex(100)
+        }
+        }
         .frame(minWidth: 850, minHeight: 600)
-        .sheet(item: $selectedMedia) { media in
+        .sheet(item: Binding<TMDBMedia?>(
+            get: { cardTransitionStyle != "overlay" ? selectedMedia : nil },
+            set: { selectedMedia = $0 }
+        )) { media in
             MovieDetailView(media: media)
         }
         .onChange(of: selectedMedia) { media in
@@ -895,10 +927,27 @@ struct MovieCard: View {
     let media: TMDBMedia
     let onSelect: (TMDBMedia) -> Void
     @State private var isHovered = false
+    @State private var isPressed = false
+    @AppStorage("cardTransitionStyle") private var cardTransitionStyle: String = "native"
     
     var body: some View {
         Button(action: {
-            onSelect(media)
+            if cardTransitionStyle == "spring" {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isPressed = true
+                }
+                Task {
+                    try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+                    await MainActor.run {
+                        onSelect(media)
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isPressed = false
+                        }
+                    }
+                }
+            } else {
+                onSelect(media)
+            }
         }) {
             VStack(alignment: .leading, spacing: 6) {
                 // Poster Image
@@ -918,8 +967,9 @@ struct MovieCard: View {
                     .frame(width: 130, height: 195)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .shadow(radius: isHovered ? 8 : 2)
-                    .scaleEffect(isHovered ? 1.03 : 1.0)
+                    .scaleEffect(isPressed ? 0.95 : (isHovered ? 1.03 : 1.0))
                     .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+                    .animation(.easeInOut(duration: 0.15), value: isPressed)
                     
                     // Rating tag
                     if let rating = media.voteAverage, rating > 0 {

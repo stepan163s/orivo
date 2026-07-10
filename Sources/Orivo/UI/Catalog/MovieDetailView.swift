@@ -11,6 +11,7 @@ public struct SearchQuery: Identifiable {
 
 public struct MovieDetailView: View {
     let media: TMDBMedia
+    var onClose: (() -> Void)? = nil
     @Environment(\.dismiss) var dismiss
     
     @State private var details: TMDBMediaDetail? = nil
@@ -338,7 +339,7 @@ public struct MovieDetailView: View {
             VStack {
                 HStack {
                     Spacer()
-                    Button(action: { dismiss() }) {
+                    Button(action: { closeView() }) {
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(.white)
@@ -490,7 +491,7 @@ public struct MovieDetailView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseCatalogSheets"))) { _ in
             activeSearchQuery = nil
-            dismiss()
+            closeView()
         }
         .task {
             await loadDetails()
@@ -642,6 +643,14 @@ public struct MovieDetailView: View {
                 }
                 print("Failed to fetch online streams: \(error.localizedDescription)")
             }
+        }
+    }
+    
+    private func closeView() {
+        if let onClose = onClose {
+            onClose()
+        } else {
+            dismiss()
         }
     }
 }

@@ -8,6 +8,7 @@ public struct SettingsView: View {
     @Binding var showSettings: Bool
     
     @AppStorage("catalogInterfaceMode") private var catalogInterfaceMode: String = "lampa"
+    @AppStorage("cardTransitionStyle") private var cardTransitionStyle: String = "native"
     
     @State private var activeCategory: SettingsCategory = .general
     @State private var showingAdvanced = false
@@ -323,6 +324,21 @@ public struct SettingsView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .frame(width: 160)
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.08))
+                
+                HStack {
+                    Text(loc.currentLanguage == "ru" ? "Анимация открытия карточки" : "Card Opening Animation")
+                        .foregroundColor(.white.opacity(0.8))
+                    Spacer()
+                    Picker("", selection: $cardTransitionStyle) {
+                        Text(loc.currentLanguage == "ru" ? "Нативная" : "Native").tag("native")
+                        Text(loc.currentLanguage == "ru" ? "С задержкой пружины" : "Spring Delay").tag("spring")
+                        Text(loc.currentLanguage == "ru" ? "Плавный оверлей" : "Smooth Overlay").tag("overlay")
+                    }
+                    .frame(width: 180)
                 }
             }
             .padding(16)
@@ -1334,6 +1350,20 @@ public struct SettingsView: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .frame(width: 160)
+            }
+            .font(.system(size: 13))
+            .padding(.top, 2)
+            
+            HStack {
+                Text(loc.currentLanguage == "ru" ? "Анимация карточки" : "Card Animation")
+                    .foregroundColor(OrivoTheme.textSecondary)
+                Spacer()
+                Picker("", selection: $cardTransitionStyle) {
+                    Text(loc.currentLanguage == "ru" ? "Нативная" : "Native").tag("native")
+                    Text(loc.currentLanguage == "ru" ? "Тактильный отклик" : "Tactile Delay").tag("spring")
+                    Text(loc.currentLanguage == "ru" ? "Плавный оверлей" : "Smooth Overlay").tag("overlay")
+                }
+                .frame(width: 180)
             }
             .font(.system(size: 13))
             .padding(.top, 2)
