@@ -26,6 +26,7 @@ public struct TorrentSelectorView: View {
     
     @State private var torrents: [JackettResult] = []
     @State private var isLoading: Bool = true
+    @State private var showSpinner: Bool = false
     @State private var errorMessage: String? = nil
     @State private var sortBySeeders: Bool = true
     @State private var selectedCategory: String = "Все"
@@ -113,7 +114,10 @@ public struct TorrentSelectorView: View {
                 
                 if isLoading {
                     Spacer()
-                    ProgressView()
+                    if showSpinner {
+                        ProgressView()
+                            .transition(.opacity)
+                    }
                     Spacer()
                 } else if let err = errorMessage {
                     Spacer()
@@ -249,6 +253,7 @@ public struct TorrentSelectorView: View {
                         }
                         .padding(20)
                     }
+                    .transition(.opacity)
                 }
             }
             
@@ -353,6 +358,19 @@ public struct TorrentSelectorView: View {
     
     private func performSearch() async {
         isLoading = true
+        showSpinner = false
+        
+        let delaySpinnerTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000) // 400ms delay
+            if !Task.isCancelled {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        self.showSpinner = true
+                    }
+                }
+            }
+        }
+        
         errorMessage = nil
         do {
             let results: [JackettResult]
@@ -361,12 +379,25 @@ public struct TorrentSelectorView: View {
             } else {
                 results = try await JackettClient.shared.search(query: query)
             }
-            self.torrents = results
-            sortTorrents()
+            
+            delaySpinnerTask.cancel()
+            
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    self.torrents = results
+                    self.isLoading = false
+                }
+                sortTorrents()
+            }
         } catch {
-            self.errorMessage = error.localizedDescription
+            delaySpinnerTask.cancel()
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.errorMessage = error.localizedDescription
+                    self.isLoading = false
+                }
+            }
         }
-        isLoading = false
     }
     
     private func sortTorrents() {
