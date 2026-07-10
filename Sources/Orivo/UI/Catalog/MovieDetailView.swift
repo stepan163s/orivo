@@ -250,7 +250,7 @@ public struct MovieDetailView: View {
                                                 
                                                 Button(action: {
                                                     LibraryManager.shared.addToHistory(media: media)
-                                                    activeSearchQuery = SearchQuery(text: "\(details.computedTitle) s\(String(format: "%02d", selectedSeason))e\(String(format: "%02d", ep.episodeNumber))")
+                                                    activeSearchQuery = SearchQuery(text: "\(details.computedTitle) s\(String(format: "%02d", selectedSeason))")
                                                     activeSearchTitle = "\(details.computedTitle) - s\(String(format: "%02d", selectedSeason))e\(String(format: "%02d", ep.episodeNumber))"
                                                 }) {
                                                     Image(systemName: "play.circle.fill")

@@ -17,6 +17,8 @@ public struct TMDBMedia: Codable, Identifiable, Hashable, Sendable {
     public let id: Int
     public let title: String?
     public let name: String? // For TV Shows
+    public var originalTitle: String? = nil
+    public var originalName: String? = nil
     public let overview: String?
     public let posterPath: String?
     public let backdropPath: String?
@@ -30,6 +32,10 @@ public struct TMDBMedia: Codable, Identifiable, Hashable, Sendable {
     
     public var computedTitle: String {
         return title ?? name ?? "Unknown Title"
+    }
+    
+    public var computedOriginalTitle: String {
+        return originalTitle ?? originalName ?? computedTitle
     }
     
     public var computedReleaseYear: String {
@@ -49,6 +55,8 @@ public struct TMDBMedia: Codable, Identifiable, Hashable, Sendable {
     
     enum CodingKeys: String, CodingKey {
         case id, title, name, overview
+        case originalTitle = "original_title"
+        case originalName = "original_name"
         case posterPath = "poster_path"
         case backdropPath = "backdrop_path"
         case voteAverage = "vote_average"
@@ -75,6 +83,8 @@ public struct TMDBMediaDetail: Codable, Sendable {
     public let id: Int
     public let title: String?
     public let name: String?
+    public var originalTitle: String? = nil
+    public var originalName: String? = nil
     public let overview: String?
     public let posterPath: String?
     public let backdropPath: String?
@@ -90,6 +100,10 @@ public struct TMDBMediaDetail: Codable, Sendable {
     
     public var computedTitle: String {
         return title ?? name ?? "Unknown Title"
+    }
+    
+    public var computedOriginalTitle: String {
+        return originalTitle ?? originalName ?? computedTitle
     }
     
     public var computedReleaseYear: String {
@@ -124,6 +138,8 @@ public struct TMDBMediaDetail: Codable, Sendable {
     
     enum CodingKeys: String, CodingKey {
         case id, title, name, overview, genres, runtime
+        case originalTitle = "original_title"
+        case originalName = "original_name"
         case posterPath = "poster_path"
         case backdropPath = "backdrop_path"
         case voteAverage = "vote_average"
