@@ -599,64 +599,76 @@ public struct MainCatalogView: View {
     private func loadFeedData() async {
         guard trendingMovies.isEmpty else { return }
         isLoading = true
-        AppPerfTracker.shared.start("Main Catalog Load Feed Data")
-        defer {
-            isLoading = false
-            AppPerfTracker.shared.stop("Main Catalog Load Feed Data")
-        }
+        AppPerfTracker.shared.start("Catalog Load - Stage 1 (Essential)")
         do {
             async let trendMovies = TMDBClient.shared.fetchTrendingMovies()
             async let trendTV = TMDBClient.shared.fetchTrendingTVShows()
             async let popMovies = TMDBClient.shared.fetchPopularMovies()
             async let popTV = TMDBClient.shared.fetchPopularTVShows()
             
-            async let trendToday = TMDBClient.shared.fetchTrendingToday()
-            async let topMovies = TMDBClient.shared.fetchTopRatedMovies()
-            async let topTV = TMDBClient.shared.fetchTopRatedTVShows()
-            
-            async let comedy = TMDBClient.shared.fetchMoviesByGenre(id: 35)
-            async let thriller = TMDBClient.shared.fetchMoviesByGenre(id: 53)
-            async let scifi = TMDBClient.shared.fetchMoviesByGenre(id: 878)
-            async let family = TMDBClient.shared.fetchMoviesByGenre(id: 10751)
-            async let history = TMDBClient.shared.fetchMoviesByGenre(id: 36)
-            async let crime = TMDBClient.shared.fetchMoviesByGenre(id: 80)
-            
+            // Wait for essential feeds first
             let loadedTrendMovies = try await trendMovies
             let loadedTrendTV = try await trendTV
             let loadedPopMovies = try await popMovies
             let loadedPopTV = try await popTV
             
-            let loadedTrendToday = try await trendToday
-            let loadedTopMovies = try await topMovies
-            let loadedTopTV = try await topTV
-            
-            let loadedComedy = try await comedy
-            let loadedThriller = try await thriller
-            let loadedScifi = try await scifi
-            let loadedFamily = try await family
-            let loadedHistory = try await history
-            let loadedCrime = try await crime
-            
-            // Assign results to states
+            // Render primary shelves immediately
             self.trendingMovies = loadedTrendMovies
             self.trendingTVShows = loadedTrendTV
             self.popularMovies = loadedPopMovies
             self.popularTVShows = loadedPopTV
             
-            self.trendingTodayMovies = loadedTrendToday
-            self.topRatedMovies = loadedTopMovies
-            self.topRatedTVShows = loadedTopTV
+            isLoading = false
+            AppPerfTracker.shared.stop("Catalog Load - Stage 1 (Essential)")
             
-            self.comedyMovies = loadedComedy
-            self.thrillerMovies = loadedThriller
-            self.scifiMovies = loadedScifi
-            self.familyMovies = loadedFamily
-            self.historyMovies = loadedHistory
-            self.crimeMovies = loadedCrime
+            // Load remaining feeds in the background
+            Task {
+                AppPerfTracker.shared.start("Catalog Load - Stage 2 (Background Genres)")
+                do {
+                    async let trendToday = TMDBClient.shared.fetchTrendingToday()
+                    async let topMovies = TMDBClient.shared.fetchTopRatedMovies()
+                    async let topTV = TMDBClient.shared.fetchTopRatedTVShows()
+                    
+                    async let comedy = TMDBClient.shared.fetchMoviesByGenre(id: 35)
+                    async let thriller = TMDBClient.shared.fetchMoviesByGenre(id: 53)
+                    async let scifi = TMDBClient.shared.fetchMoviesByGenre(id: 878)
+                    async let family = TMDBClient.shared.fetchMoviesByGenre(id: 10751)
+                    async let history = TMDBClient.shared.fetchMoviesByGenre(id: 36)
+                    async let crime = TMDBClient.shared.fetchMoviesByGenre(id: 80)
+                    
+                    let loadedTrendToday = try await trendToday
+                    let loadedTopMovies = try await topMovies
+                    let loadedTopTV = try await topTV
+                    let loadedComedy = try await comedy
+                    let loadedThriller = try await thriller
+                    let loadedScifi = try await scifi
+                    let loadedFamily = try await family
+                    let loadedHistory = try await history
+                    let loadedCrime = try await crime
+                    
+                    await MainActor.run {
+                        self.trendingTodayMovies = loadedTrendToday
+                        self.topRatedMovies = loadedTopMovies
+                        self.topRatedTVShows = loadedTopTV
+                        
+                        self.comedyMovies = loadedComedy
+                        self.thrillerMovies = loadedThriller
+                        self.scifiMovies = loadedScifi
+                        self.familyMovies = loadedFamily
+                        self.historyMovies = loadedHistory
+                        self.crimeMovies = loadedCrime
+                        AppPerfTracker.shared.stop("Catalog Load - Stage 2 (Background Genres)")
+                    }
+                } catch {
+                    AppPerfTracker.shared.stop("Catalog Load - Stage 2 (Background Genres)")
+                    LogManager.shared.log(serviceId: "system", text: "Background catalog feed loading failed: \(error.localizedDescription)", isError: true)
+                }
+            }
         } catch {
             self.errorMessage = error.localizedDescription
+            isLoading = false
+            AppPerfTracker.shared.stop("Catalog Load - Stage 1 (Essential)")
         }
-        isLoading = false
     }
     
     private func performSearch() {

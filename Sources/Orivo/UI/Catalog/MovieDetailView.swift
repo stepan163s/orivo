@@ -541,6 +541,16 @@ public struct MovieDetailView: View {
                         _ = try? await preloadImage(url: posterURL)
                     }
                 }
+                // Pre-download first 12 actor profile images
+                if let cast = fetchedDetails.credits?.cast {
+                    for actor in cast.prefix(12) {
+                        if let profileURL = actor.profileURL {
+                            group.addTask {
+                                _ = try? await preloadImage(url: profileURL)
+                            }
+                        }
+                    }
+                }
             }
             let prefetchDuration = Date().timeIntervalSince(prefetchStartTime) * 1000
             LogManager.shared.log(serviceId: "system", text: "Preload: All media assets preloaded concurrently in \(String(format: "%.1f", prefetchDuration))ms")
