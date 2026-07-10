@@ -360,18 +360,18 @@ public struct MainCatalogView: View {
             }
         }
         
-        if cardTransitionStyle == "overlay", let media = selectedMedia {
+        if let media = selectedMedia {
             Color.black.opacity(0.55)
                 .ignoresSafeArea()
                 .transition(.opacity)
                 .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.35)) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
                         selectedMedia = nil
                     }
                 }
             
             MovieDetailView(media: media, onClose: {
-                withAnimation(.easeInOut(duration: 0.35)) {
+                withAnimation(.easeInOut(duration: 0.3)) {
                     selectedMedia = nil
                 }
             })
@@ -381,18 +381,12 @@ public struct MainCatalogView: View {
             .shadow(radius: 20)
             .transition(.asymmetric(
                 insertion: .move(edge: .bottom).combined(with: .opacity),
-                removal: .move(edge: .bottom).combined(with: .opacity)
+                removal: .opacity
             ))
             .zIndex(100)
         }
         }
         .frame(minWidth: 850, minHeight: 600)
-        .sheet(item: Binding<TMDBMedia?>(
-            get: { cardTransitionStyle != "overlay" ? selectedMedia : nil },
-            set: { selectedMedia = $0 }
-        )) { media in
-            MovieDetailView(media: media)
-        }
         .onChange(of: selectedMedia) { media in
             if let media = media {
                 PreloadTracker.shared.start(for: media.id)
@@ -840,30 +834,11 @@ struct RankMovieCard: View {
     let media: TMDBMedia
     let onSelect: (TMDBMedia) -> Void
     @State private var isHovered = false
-    @State private var isPressed = false
-    @AppStorage("cardTransitionStyle") private var cardTransitionStyle: String = "native"
     
     var body: some View {
         Button(action: {
-            // Start preloading immediately at millisecond 0!
             PreloadTracker.shared.startPreload(media: media)
-            
-            if cardTransitionStyle == "spring" {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isPressed = true
-                }
-                Task {
-                    try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
-                    await MainActor.run {
-                        onSelect(media)
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isPressed = false
-                        }
-                    }
-                }
-            } else {
-                onSelect(media)
-            }
+            onSelect(media)
         }) {
             ZStack(alignment: .topTrailing) {
                 CachedAsyncImage(url: media.posterURL) { image in
@@ -881,9 +856,8 @@ struct RankMovieCard: View {
                 .frame(width: 130, height: 195)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .shadow(radius: isHovered ? 8 : 2)
-                .scaleEffect(isPressed ? 0.95 : (isHovered ? 1.03 : 1.0))
+                .scaleEffect(isHovered ? 1.03 : 1.0)
                 .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
-                .animation(.easeInOut(duration: 0.15), value: isPressed)
                 
                 // Rating tag
                 if let rating = media.voteAverage, rating > 0 {
@@ -948,30 +922,11 @@ struct MovieCard: View {
     let media: TMDBMedia
     let onSelect: (TMDBMedia) -> Void
     @State private var isHovered = false
-    @State private var isPressed = false
-    @AppStorage("cardTransitionStyle") private var cardTransitionStyle: String = "native"
     
     var body: some View {
         Button(action: {
-            // Start preloading immediately at millisecond 0!
             PreloadTracker.shared.startPreload(media: media)
-            
-            if cardTransitionStyle == "spring" {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isPressed = true
-                }
-                Task {
-                    try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
-                    await MainActor.run {
-                        onSelect(media)
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isPressed = false
-                        }
-                    }
-                }
-            } else {
-                onSelect(media)
-            }
+            onSelect(media)
         }) {
             VStack(alignment: .leading, spacing: 6) {
                 // Poster Image
@@ -991,9 +946,8 @@ struct MovieCard: View {
                     .frame(width: 130, height: 195)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .shadow(radius: isHovered ? 8 : 2)
-                    .scaleEffect(isPressed ? 0.95 : (isHovered ? 1.03 : 1.0))
+                    .scaleEffect(isHovered ? 1.03 : 1.0)
                     .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
-                    .animation(.easeInOut(duration: 0.15), value: isPressed)
                     
                     // Rating tag
                     if let rating = media.voteAverage, rating > 0 {
