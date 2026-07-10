@@ -355,7 +355,12 @@ public struct TorrentSelectorView: View {
         isLoading = true
         errorMessage = nil
         do {
-            let results = try await JackettClient.shared.search(query: query)
+            let results: [JackettResult]
+            if let mediaId = mediaId, let preloadedTorrentTask = PreloadTracker.shared.getPreloadedTorrentTask(for: mediaId) {
+                results = try await preloadedTorrentTask.value
+            } else {
+                results = try await JackettClient.shared.search(query: query)
+            }
             self.torrents = results
             sortTorrents()
         } catch {

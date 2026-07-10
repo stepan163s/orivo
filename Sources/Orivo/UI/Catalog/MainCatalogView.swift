@@ -386,6 +386,7 @@ public struct MainCatalogView: View {
             .zIndex(100)
         }
         }
+        .animation(.easeInOut(duration: 0.3), value: selectedMedia != nil)
         .frame(minWidth: 850, minHeight: 600)
         .onChange(of: selectedMedia) { media in
             if let media = media {

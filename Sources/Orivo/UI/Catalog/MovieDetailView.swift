@@ -713,6 +713,7 @@ public final class PreloadTracker: @unchecked Sendable {
     public static let shared = PreloadTracker()
     private var clickTimes: [Int: Date] = [:]
     private var preloadingTasks: [Int: Task<TMDBMediaDetail, any Error>] = [:]
+    private var preloadingTorrentTasks: [Int: Task<[JackettResult], any Error>] = [:]
     private let lock = NSLock()
     
     public func start(for mediaId: Int) {
@@ -732,37 +733,51 @@ public final class PreloadTracker: @unchecked Sendable {
         lock.lock()
         clickTimes[media.id] = Date()
         
-        // If it's already preloading, do nothing
-        guard preloadingTasks[media.id] == nil else {
-            lock.unlock()
-            return
+        // 1. Movie details preload
+        if preloadingTasks[media.id] == nil {
+            let task = Task<TMDBMediaDetail, any Error> {
+                let isTV = media.mediaType == "tv" || media.releaseDate == nil
+                let fetchedDetails: TMDBMediaDetail
+                if isTV {
+                    fetchedDetails = try await TMDBClient.shared.fetchTVShowDetails(id: media.id)
+                } else {
+                    fetchedDetails = try await TMDBClient.shared.fetchMovieDetails(id: media.id)
+                }
+                
+                // Prefetch the poster in background immediately
+                if let posterURL = fetchedDetails.posterURL {
+                    Task {
+                        _ = try? await PreloadTracker.preloadImage(url: posterURL)
+                    }
+                }
+                
+                return fetchedDetails
+            }
+            preloadingTasks[media.id] = task
         }
         
-        let task = Task<TMDBMediaDetail, any Error> {
-            let isTV = media.mediaType == "tv" || media.releaseDate == nil
-            let fetchedDetails: TMDBMediaDetail
-            if isTV {
-                fetchedDetails = try await TMDBClient.shared.fetchTVShowDetails(id: media.id)
-            } else {
-                fetchedDetails = try await TMDBClient.shared.fetchMovieDetails(id: media.id)
+        // 2. Movie torrent search preload (only for Movies, TV shows search per-episode later)
+        let isTV = media.mediaType == "tv" || media.releaseDate == nil
+        if !isTV && preloadingTorrentTasks[media.id] == nil {
+            let torrentTask = Task<[JackettResult], any Error> {
+                return try await JackettClient.shared.search(query: media.computedTitle)
             }
-            
-            // Prefetch the poster in background immediately
-            if let posterURL = fetchedDetails.posterURL {
-                Task {
-                    _ = try? await PreloadTracker.preloadImage(url: posterURL)
-                }
-            }
-            
-            return fetchedDetails
+            preloadingTorrentTasks[media.id] = torrentTask
         }
-        preloadingTasks[media.id] = task
+        
         lock.unlock()
     }
     
     public func getPreloadedTask(for mediaId: Int) -> Task<TMDBMediaDetail, any Error>? {
         lock.lock()
         let task = preloadingTasks.removeValue(forKey: mediaId)
+        lock.unlock()
+        return task
+    }
+    
+    public func getPreloadedTorrentTask(for mediaId: Int) -> Task<[JackettResult], any Error>? {
+        lock.lock()
+        let task = preloadingTorrentTasks.removeValue(forKey: mediaId)
         lock.unlock()
         return task
     }
