@@ -29,100 +29,137 @@ public struct BufferingOverlayView: View {
     
     public var body: some View {
         ZStack {
-            Color.black.opacity(0.85)
+            // Dark glassmorphic background
+            VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
+                .overlay(Color.black.opacity(0.4))
                 .ignoresSafeArea()
             
             VStack(spacing: 24) {
-                // Movie metadata
-                VStack(spacing: 6) {
+                // Header / Movie Title
+                VStack(spacing: 4) {
                     Text(title)
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .lineLimit(1)
                     Text(filename)
                         .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(.white.opacity(0.4))
                         .lineLimit(1)
                         .frame(maxWidth: 320)
                 }
                 
-                // Circular Progress Indicator
+                // Ring with glowing progress indicator
                 ZStack {
                     Circle()
-                        .stroke(Color.white.opacity(0.1), lineWidth: 10)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 8)
                         .frame(width: 140, height: 140)
                     
                     Circle()
                         .trim(from: 0.0, to: CGFloat(progress))
                         .stroke(
-                            AngularGradient(
-                                colors: [.blue, .cyan, .blue],
-                                center: .center
+                            LinearGradient(
+                                colors: [Color.blue, Color.purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             ),
-                            style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
                         )
                         .rotationEffect(Angle(degrees: -90))
                         .frame(width: 140, height: 140)
-                        .animation(.linear(duration: 0.5), value: progress)
+                        .shadow(color: Color.blue.opacity(0.35), radius: 6)
+                        .animation(.linear(duration: 0.4), value: progress)
                     
-                    VStack(spacing: 4) {
+                    VStack(spacing: 6) {
                         Text(String(format: "%.0f%%", progress * 100))
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                         
                         Text(statusString)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.5))
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white.opacity(0.6))
+                            .textCase(.uppercase)
+                            .tracking(1.0)
                     }
                 }
+                .padding(.vertical, 8)
                 
-                // Download Stats
-                HStack(spacing: 32) {
-                    VStack(alignment: .center, spacing: 4) {
-                        Text("Скорость")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.5))
-                        Text(speedString)
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
+                // Stats HUD bar
+                HStack(spacing: 0) {
+                    // Speed
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.down.circle")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 14))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("СКОРОСТЬ")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.white.opacity(0.4))
+                            Text(speedString)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white)
+                        }
                     }
                     
-                    VStack(alignment: .center, spacing: 4) {
-                        Text("Пиры")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.5))
-                        Text("\(peersCount) / \(totalPeers)")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
+                    Spacer()
+                    
+                    Divider()
+                        .frame(height: 24)
+                        .background(Color.white.opacity(0.1))
+                    
+                    Spacer()
+                    
+                    // Peers
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.2")
+                            .foregroundColor(.purple)
+                            .font(.system(size: 14))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("ПИРЫ")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.white.opacity(0.4))
+                            Text("\(peersCount) / \(totalPeers)")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white)
+                        }
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .background(Color.white.opacity(0.04))
-                .cornerRadius(8)
+                .background(Color.white.opacity(0.03))
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                )
+                .frame(width: 320)
                 
-                // Cancel Button
+                // Frosted Cancel Button
                 Button(action: {
                     stopTimer()
                     onClose()
                 }) {
                     Text("Отмена")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 24)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.horizontal, 32)
                         .padding(.vertical, 8)
-                        .background(Color.red.opacity(0.2))
+                        .background(Color.red.opacity(0.15))
+                        .cornerRadius(8)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.red.opacity(0.4), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.red.opacity(0.3), lineWidth: 1)
                         )
-                        .cornerRadius(6)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
-            .padding(32)
+            .padding(24)
         }
-        .frame(width: 400, height: 400)
+        .frame(width: 380, height: 410)
+        .cornerRadius(24)
+        .overlay(
+            RoundedRectangle(cornerRadius: 24)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
         .onAppear {
             startTimer()
         }

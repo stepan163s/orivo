@@ -73,6 +73,16 @@ public struct TorrServerStatusResponse: Codable {
     public let files: [TorrServerFile]?
     
     public var bufferingProgress: Double {
+        if let statString = stat_string, !statString.isEmpty {
+            let pattern = "(\\d+)%"
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+               let match = regex.firstMatch(in: statString, options: [], range: NSRange(statString.startIndex..., in: statString)) {
+                if let range = Range(match.range(at: 1), in: statString),
+                   let percent = Double(statString[range]) {
+                    return percent / 100.0
+                }
+            }
+        }
         guard let loaded = loaded_size, let preload = preload_size, preload > 0 else { return 0 }
         return min(Double(loaded) / Double(preload), 1.0)
     }
