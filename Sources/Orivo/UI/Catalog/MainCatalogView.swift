@@ -599,6 +599,11 @@ public struct MainCatalogView: View {
     private func loadFeedData() async {
         guard trendingMovies.isEmpty else { return }
         isLoading = true
+        AppPerfTracker.shared.start("Main Catalog Load Feed Data")
+        defer {
+            isLoading = false
+            AppPerfTracker.shared.stop("Main Catalog Load Feed Data")
+        }
         do {
             async let trendMovies = TMDBClient.shared.fetchTrendingMovies()
             async let trendTV = TMDBClient.shared.fetchTrendingTVShows()
@@ -657,13 +662,17 @@ public struct MainCatalogView: View {
     private func performSearch() {
         guard !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         isSearching = true
+        AppPerfTracker.shared.start("Search Movies: \(searchQuery)")
         Task {
+            defer {
+                isSearching = false
+                AppPerfTracker.shared.stop("Search Movies: \(searchQuery)")
+            }
             do {
                 self.searchResults = try await TMDBClient.shared.searchMulti(query: searchQuery)
             } catch {
                 print("Search failed: \(error.localizedDescription)")
             }
-            isSearching = false
         }
     }
     
@@ -683,7 +692,11 @@ public struct MainCatalogView: View {
     
     private func selectKinoriumItem(_ item: KinoriumWatchItem) {
         isLoadingKinoriumWatchlist = true
+        AppPerfTracker.shared.start("Resolve Kinorium Watchlist Item: \(item.title)")
         Task {
+            defer {
+                AppPerfTracker.shared.stop("Resolve Kinorium Watchlist Item: \(item.title)")
+            }
             do {
                 let query = item.originalTitle ?? item.title
                 if !query.isEmpty {

@@ -197,7 +197,16 @@ public final class TMDBClient: Sendable {
     private let baseURL = "https://api.themoviedb.org/3"
     private let language = "ru-RU"
     
-    private init() {}
+    private let session: URLSession
+    
+    private init() {
+        let config = URLSessionConfiguration.default
+        config.httpMaximumConnectionsPerHost = 30
+        config.timeoutIntervalForRequest = 10.0
+        config.httpShouldUsePipelining = true
+        config.connectionProxyDictionary = [:]
+        self.session = URLSession(configuration: config)
+    }
     
     private func fetch<T: Codable>(endpoint: String, queryItems: [URLQueryItem] = []) async throws -> T {
         let customKey = await MainActor.run { SettingsManager.shared.settings.tmdbApiKey }
@@ -215,7 +224,11 @@ public final class TMDBClient: Sendable {
             throw URLError(.badURL)
         }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let eventName = "TMDB Fetch: \(endpoint)"
+        AppPerfTracker.shared.start(eventName)
+        defer { AppPerfTracker.shared.stop(eventName) }
+        
+        let (data, response) = try await self.session.data(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw URLError(.badServerResponse)

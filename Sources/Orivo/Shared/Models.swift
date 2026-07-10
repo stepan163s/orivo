@@ -72,6 +72,10 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var jackettHost: String
     public var useTorrServer: Bool
     public var useJackett: Bool
+    public var useInternalSolver: Bool
+    public var useSolverProxy: Bool
+    public var solverProxyHost: String
+    public var solverProxyPort: Int
     
     // External servers configuration
     public var useExternalServers: Bool
@@ -113,6 +117,10 @@ public struct AppSettings: Codable, Hashable, Sendable {
         jackettHost: String = "http://127.0.0.1:9117",
         useTorrServer: Bool = true,
         useJackett: Bool = true,
+        useInternalSolver: Bool = true,
+        useSolverProxy: Bool = false,
+        solverProxyHost: String = "127.0.0.1",
+        solverProxyPort: Int = 12334,
         useExternalServers: Bool = false,
         externalLampaURL: String = "",
         externalTorrServerHost: String = "",
@@ -141,6 +149,10 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.jackettHost = jackettHost
         self.useTorrServer = useTorrServer
         self.useJackett = useJackett
+        self.useInternalSolver = useInternalSolver
+        self.useSolverProxy = useSolverProxy
+        self.solverProxyHost = solverProxyHost
+        self.solverProxyPort = solverProxyPort
         self.useExternalServers = useExternalServers
         self.externalLampaURL = externalLampaURL
         self.externalTorrServerHost = externalTorrServerHost
@@ -182,6 +194,10 @@ public struct AppSettings: Codable, Hashable, Sendable {
         case traktClientID
         case kinoriumEmail
         case kinoriumBypassVPN
+        case useInternalSolver
+        case useSolverProxy
+        case solverProxyHost
+        case solverProxyPort
     }
     
     public init(from decoder: Decoder) throws {
@@ -196,6 +212,10 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.jackettHost = try container.decodeIfPresent(String.self, forKey: .jackettHost) ?? "http://127.0.0.1:9117"
         self.useTorrServer = try container.decodeIfPresent(Bool.self, forKey: .useTorrServer) ?? true
         self.useJackett = try container.decodeIfPresent(Bool.self, forKey: .useJackett) ?? true
+        self.useInternalSolver = try container.decodeIfPresent(Bool.self, forKey: .useInternalSolver) ?? true
+        self.useSolverProxy = try container.decodeIfPresent(Bool.self, forKey: .useSolverProxy) ?? false
+        self.solverProxyHost = try container.decodeIfPresent(String.self, forKey: .solverProxyHost) ?? "127.0.0.1"
+        self.solverProxyPort = try container.decodeIfPresent(Int.self, forKey: .solverProxyPort) ?? 12334
         
         self.useExternalServers = try container.decodeIfPresent(Bool.self, forKey: .useExternalServers) ?? false
         self.externalLampaURL = try container.decodeIfPresent(String.self, forKey: .externalLampaURL) ?? ""
@@ -228,6 +248,10 @@ public struct AppSettings: Codable, Hashable, Sendable {
         jackettHost: "http://127.0.0.1:9117",
         useTorrServer: true,
         useJackett: true,
+        useInternalSolver: true,
+        useSolverProxy: false,
+        solverProxyHost: "127.0.0.1",
+        solverProxyPort: 12334,
         useExternalServers: false,
         externalLampaURL: "",
         externalTorrServerHost: "",

@@ -70,6 +70,8 @@ public struct JackettResult: Codable, Identifiable, Hashable, Sendable {
 public final class JackettClient: Sendable {
     public static let shared = JackettClient()
     
+    private let session: URLSession
+    
     private func getBaseURL() async -> String {
         return await MainActor.run {
             let settings = SettingsManager.shared.settings
@@ -82,7 +84,12 @@ public final class JackettClient: Sendable {
         }
     }
     
-    private init() {}
+    private init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10.0
+        config.httpMaximumConnectionsPerHost = 15
+        self.session = URLSession(configuration: config)
+    }
     
     public func getJackettAPIKey() async -> String {
         return await MainActor.run {
@@ -118,6 +125,10 @@ public final class JackettClient: Sendable {
     }
     
     public func search(query: String) async throws -> [JackettResult] {
+        let eventName = "Jackett Search: \(query)"
+        AppPerfTracker.shared.start(eventName)
+        defer { AppPerfTracker.shared.stop(eventName) }
+        
         let apiKey = await getJackettAPIKey()
         guard !apiKey.isEmpty else {
             throw NSError(domain: "JackettClient", code: 1, userInfo: [NSLocalizedDescriptionKey: "Jackett API Key not found. Please verify Jackett is installed or configure an external server API key."])
@@ -127,14 +138,17 @@ public final class JackettClient: Sendable {
         var urlComponents = URLComponents(string: "\(base)/api/v2.0/indexers/all/results")
         urlComponents?.queryItems = [
             URLQueryItem(name: "apikey", value: apiKey),
-            URLQueryItem(name: "Query", value: query)
+            URLQueryItem(name: "Query", value: query),
+            URLQueryItem(name: "Category[]", value: "2000"),
+            URLQueryItem(name: "Category[]", value: "5000"),
+            URLQueryItem(name: "Category[]", value: "8000")
         ]
         
         guard let url = urlComponents?.url else {
             throw URLError(.badURL)
         }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await self.session.data(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw URLError(.badServerResponse)
@@ -154,7 +168,7 @@ public final class JackettClient: Sendable {
         urlComponents?.queryItems = [URLQueryItem(name: "apikey", value: apiKey)]
         guard let targetURL = urlComponents?.url else { return [] }
         
-        let (data, response) = try await URLSession.shared.data(from: targetURL)
+        let (data, response) = try await self.session.data(from: targetURL)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             return []
         }

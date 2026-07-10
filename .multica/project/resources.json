@@ -1,0 +1,22 @@
+{
+  "project_id": "3f987732-de98-426b-97f0-2c7b6bfa3127",
+  "project_title": "orivo",
+  "resources": [
+    {
+      "id": "c7f9cf12-1525-4e1c-b4b0-dce39b06a686",
+      "resource_type": "local_directory",
+      "resource_ref": {
+        "label": "orivo",
+        "daemon_id": "019f40da-95b8-7098-8e44-cebc98140bfa",
+        "local_path": "/Users/stepan163s/orivo"
+      }
+    },
+    {
+      "id": "d436769a-2831-485e-8c7d-51b43d6e55ae",
+      "resource_type": "github_repo",
+      "resource_ref": {
+        "url": "https://github.com/stepan163s/orivo"
+      }
+    }
+  ]
+}

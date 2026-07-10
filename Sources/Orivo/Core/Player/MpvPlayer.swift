@@ -52,6 +52,9 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
     private let eventLoopSemaphore = DispatchSemaphore(value: 0)
     
     public override init() {
+        AppPerfTracker.shared.start("MpvPlayer Init")
+        defer { AppPerfTracker.shared.stop("MpvPlayer Init") }
+        
         super.init()
         guard let handle = mpv_create() else {
             LogManager.shared.log(serviceId: "system", text: "MpvPlayer error: Failed to create mpv handle", isError: true)
@@ -75,6 +78,18 @@ public class MpvPlayer: NSObject, @unchecked Sendable {
         let cache = "yes"
         _ = cache.withCString { ptr in
             mpv_set_option_string(handle, "cache", ptr)
+        }
+        
+        // Disable youtube-dl checks to speed up opening local stream links
+        let ytdl = "no"
+        _ = ytdl.withCString { ptr in
+            mpv_set_option_string(handle, "ytdl", ptr)
+        }
+        
+        // Do not pause on initial cache loading to start playing instantly
+        let cachePauseInitial = "no"
+        _ = cachePauseInitial.withCString { ptr in
+            mpv_set_option_string(handle, "cache-pause-initial", ptr)
         }
         
         // Set network buffer cache size to 60 seconds

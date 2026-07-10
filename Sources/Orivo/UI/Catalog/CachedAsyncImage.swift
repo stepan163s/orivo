@@ -64,6 +64,10 @@ public struct CachedAsyncImage<Content: View, Placeholder: View>: View {
             return
         }
         
+        let eventName = "Image Load: \(url.lastPathComponent)"
+        AppPerfTracker.shared.start(eventName)
+        defer { AppPerfTracker.shared.stop(eventName) }
+        
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {

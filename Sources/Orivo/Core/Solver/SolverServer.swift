@@ -1,12 +1,14 @@
 import Foundation
-import Network
 import WebKit
+import Network
 import AppKit
 
 @MainActor
 private final class SolveSession: NSObject, WKNavigationDelegate {
     let id: UUID
     let urlString: String
+    let proxyHost: String?
+    let proxyPort: Int?
     let completion: (String?, [HTTPCookie], String?) -> Void
     
     private var webView: WKWebView?
@@ -14,46 +16,112 @@ private final class SolveSession: NSObject, WKNavigationDelegate {
     private var solveTimer: Timer?
     private var solveTimeoutWorkItem: DispatchWorkItem?
     private var onFinished: (() -> Void)?
+    private var startTime: Date = Date()
+    private var isWindowShown = false
     
-    init(id: UUID, urlString: String, completion: @escaping (String?, [HTTPCookie], String?) -> Void, onFinished: @escaping () -> Void) {
+    init(id: UUID, urlString: String, proxyHost: String?, proxyPort: Int?, completion: @escaping (String?, [HTTPCookie], String?) -> Void, onFinished: @escaping () -> Void) {
         self.id = id
         self.urlString = urlString
+        self.proxyHost = proxyHost
+        self.proxyPort = proxyPort
         self.completion = completion
         self.onFinished = onFinished
         super.init()
     }
     
     func start() {
+        self.startTime = Date()
         guard let url = URL(string: urlString) else {
             finish(html: nil, cookies: [], userAgent: nil)
             return
         }
         
         let config = WKWebViewConfiguration()
+        config.applicationNameForUserAgent = ""
         config.websiteDataStore = .default()
+        
+        let userContentController = WKUserContentController()
+        let jsSource = """
+        setInterval(function() {
+            var cb = document.querySelector('input[type="checkbox"]');
+            if (cb && !cb.checked) {
+                cb.click();
+                cb.dispatchEvent(new Event('change'));
+            }
+            var stage = document.querySelector('#challenge-stage') || document.querySelector('.ct-checkbox-label') || document.querySelector('.mark') || document.querySelector('#cf-stage');
+            if (stage) {
+                stage.click();
+            }
+        }, 500);
+        """
+        let userScript = WKUserScript(source: jsSource, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        userContentController.addUserScript(userScript)
+        config.userContentController = userContentController
+        
+        let settings = SettingsManager.shared.settings
+        let finalHost: String?
+        let finalPort: Int?
+        
+        if settings.useSolverProxy {
+            finalHost = settings.solverProxyHost
+            finalPort = settings.solverProxyPort
+        } else if let pHost = proxyHost, let pPort = proxyPort {
+            finalHost = pHost
+            finalPort = pPort
+        } else {
+            finalHost = nil
+            finalPort = nil
+        }
+        
+        if #available(macOS 14.0, *), let pHost = finalHost, let pPort = finalPort {
+            let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(pHost), port: NWEndpoint.Port(rawValue: UInt16(pPort)) ?? 12334)
+            let proxyConfig = ProxyConfiguration(httpCONNECTProxy: endpoint)
+            config.websiteDataStore.proxyConfigurations = [proxyConfig]
+            LogManager.shared.log(serviceId: "system", text: "SolverServer: WKWebView configured with proxy \(pHost):\(pPort)")
+        }
         
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 768), configuration: config)
         webView.navigationDelegate = self
-        // Set standard Mac Safari user agent to ensure Cloudflare doesn't flag us as a bot
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
         self.webView = webView
         
-        // Host the WebView in an off-screen borderless window so Turnstile JS execution and layout runs at 100% speed
+        // Host the WebView in a window positioned partially on-screen (only 1 pixel visible at bottom-left: 0,0)
+        // This forces macOS WindowServer to keep GPU acceleration and JS execution active on 100% speed.
         let window = NSWindow(
-            contentRect: CGRect(x: -2000, y: -2000, width: 1024, height: 768),
+            contentRect: CGRect(x: -1023, y: -767, width: 1024, height: 768),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
         window.contentView = webView
         window.isReleasedWhenClosed = false
-        window.orderBack(nil)
+        window.ignoresMouseEvents = true
+        window.alphaValue = 1.0
+        window.orderFrontRegardless()
         self.window = window
         
-        let request = URLRequest(url: url)
-        webView.load(request)
+        let store = config.websiteDataStore
+        let targetHost = url.host?.lowercased() ?? ""
         
-        startPolling(for: url)
+        store.httpCookieStore.getAllCookies { [weak self, weak webView] cookies in
+            guard let self = self, let webView = webView else { return }
+            let dispatchGroup = DispatchGroup()
+            
+            for cookie in cookies {
+                let domain = cookie.domain.lowercased()
+                if targetHost.contains(domain) || domain.contains(targetHost) {
+                    dispatchGroup.enter()
+                    store.httpCookieStore.delete(cookie) {
+                        dispatchGroup.leave()
+                    }
+                }
+            }
+            
+            dispatchGroup.notify(queue: .main) {
+                let request = URLRequest(url: url)
+                webView.load(request)
+                self.startPolling(for: url)
+            }
+        }
     }
     
     private func cancelPendingSolve() {
@@ -85,26 +153,130 @@ private final class SolveSession: NSObject, WKNavigationDelegate {
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
             guard let self = self else { return }
             
-            // Check if Cloudflare's clearance cookie is set
-            let hasClearance = cookies.contains { $0.name == "cf_clearance" }
+            // Filter cookies to belong only to the target host to prevent leaking other session cookies
+            let targetHost = url.host?.lowercased() ?? ""
+            let hostParts = targetHost.split(separator: ".")
+            let mainHostPart = String(hostParts.first(where: { $0 != "www" }) ?? "")
             
-            webView.evaluateJavaScript("document.title") { titleResult, _ in
-                let title = titleResult as? String ?? ""
-                
-                webView.evaluateJavaScript("document.documentElement.outerHTML") { htmlResult, _ in
-                    let html = htmlResult as? String ?? ""
+            let filteredCookies = cookies.filter { cookie in
+                let domain = cookie.domain.lowercased()
+                return (!mainHostPart.isEmpty && domain.contains(mainHostPart)) || targetHost.contains(domain) || domain.contains(targetHost)
+            }
+            
+            let hasClearance = filteredCookies.contains { $0.name == "cf_clearance" }
+            let isDoneLoading = !webView.isLoading
+            
+            // Check if Cloudflare challenge is still active by examining the webview title
+            let title = webView.title ?? ""
+            let isChallengeActive = title.contains("Just a moment...") || title.contains("Checking your browser")
+            
+            let solveSuccessful = hasClearance && !isChallengeActive
+            let normalLoadComplete = isDoneLoading && !isChallengeActive
+            
+            let timeSinceStart = Date().timeIntervalSince(self.startTime)
+            LogManager.shared.log(serviceId: "system", text: "SolverServer Status: title='\(title)', hasClearance=\(hasClearance), isDoneLoading=\(isDoneLoading), isChallengeActive=\(isChallengeActive), elapsed=\(timeSinceStart)")
+            
+            if isChallengeActive && !hasClearance {
+                let jsFindIframe = """
+                (function() {
+                    var iframe = document.querySelector('iframe[src*="challenges.cloudflare.com"]') || 
+                                 document.querySelector('iframe[src*="turnstile"]') ||
+                                 document.querySelector('.cf-turnstile iframe') ||
+                                 document.querySelector('iframe');
+                    if (iframe) {
+                        var rect = iframe.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            return {
+                                x: rect.left + rect.width / 2,
+                                y: rect.top + rect.height / 2,
+                                found: true
+                            };
+                        }
+                    }
+                    return { found: false };
+                })()
+                """
+                webView.evaluateJavaScript(jsFindIframe) { [weak self, weak webView] result, _ in
+                    guard let self = self, let webView = webView, let dict = result as? [String: Any], let found = dict["found"] as? Bool, found else { return }
+                    guard let x = dict["x"] as? Double, let y = dict["y"] as? Double else { return }
                     
-                    // Verify if Cloudflare challenge elements or title are active
-                    let isChallengeActive = title.contains("Just a moment...") || 
-                                           html.contains("cf-challenge") || 
-                                           html.contains("challenge-platform") || 
-                                           html.contains("Checking your browser")
+                    let clickX = CGFloat(x)
+                    let clickY = webView.bounds.height - CGFloat(y)
+                    let windowPoint = CGPoint(x: clickX, y: clickY)
                     
-                    if hasClearance || (!isChallengeActive && !html.isEmpty) {
-                        let userAgent = webView.value(forKey: "userAgent") as? String ?? webView.customUserAgent ?? ""
-                        self.finish(html: html, cookies: cookies, userAgent: userAgent)
+                    LogManager.shared.log(serviceId: "system", text: "SolverServer: Auto-clicking Turnstile iframe at (\(clickX), \(clickY))")
+                    
+                    let eventDown = NSEvent.mouseEvent(
+                        with: .leftMouseDown,
+                        location: windowPoint,
+                        modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: self.window?.windowNumber ?? 0,
+                        context: nil,
+                        eventNumber: 0,
+                        clickCount: 1,
+                        pressure: 1.0
+                    )
+                    let eventUp = NSEvent.mouseEvent(
+                        with: .leftMouseUp,
+                        location: windowPoint,
+                        modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: self.window?.windowNumber ?? 0,
+                        context: nil,
+                        eventNumber: 0,
+                        clickCount: 1,
+                        pressure: 0.0
+                    )
+                    
+                    if let eventDown = eventDown, let eventUp = eventUp {
+                        webView.mouseDown(with: eventDown)
+                        webView.mouseUp(with: eventUp)
                     }
                 }
+            }
+            
+            if isChallengeActive && !hasClearance && timeSinceStart >= 10.0 {
+                self.showWindowInteractive()
+            }
+            
+            if solveSuccessful || normalLoadComplete {
+                // Stop the check timer immediately
+                self.cancelPendingSolve()
+                
+                // Fetch the HTML content once and finish
+                webView.evaluateJavaScript("document.documentElement.outerHTML") { [weak self] htmlResult, _ in
+                    guard let self = self else { return }
+                    let html = htmlResult as? String ?? ""
+                    let userAgent = webView.value(forKey: "userAgent") as? String ?? webView.customUserAgent ?? ""
+                    self.finish(html: html, cookies: filteredCookies, userAgent: userAgent)
+                }
+            }
+        }
+    }
+    
+    private func showWindowInteractive() {
+        guard !isWindowShown, let window = window else { return }
+        isWindowShown = true
+        
+        LogManager.shared.log(serviceId: "system", text: "SolverServer: CF challenge active for >2s, showing interactive verification window.")
+        
+        DispatchQueue.main.async { [weak window] in
+            guard let window = window else { return }
+            window.styleMask = [.titled, .closable]
+            window.title = "Orivo - Проверка Cloudflare (1337x)"
+            
+            if let screen = NSScreen.main {
+                let screenRect = screen.visibleFrame
+                let width: CGFloat = 460
+                let height: CGFloat = 360
+                let x = (screenRect.width - width) / 2 + screenRect.minX
+                let y = (screenRect.height - height) / 2 + screenRect.minY
+                
+                window.setFrame(CGRect(x: x, y: y, width: width, height: height), display: true)
+                window.ignoresMouseEvents = false
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
             }
         }
     }
@@ -112,24 +284,35 @@ private final class SolveSession: NSObject, WKNavigationDelegate {
     private func finish(html: String?, cookies: [HTTPCookie], userAgent: String?) {
         cancelPendingSolve()
         
+        DispatchQueue.main.async { [weak window] in
+            window?.close()
+        }
+        
         completion(html, cookies, userAgent)
         
         // Clean up references and window context
         self.webView?.navigationDelegate = nil
         self.webView = nil
         self.window?.contentView = nil
-        self.window?.close()
         self.window = nil
         
         onFinished?()
         onFinished = nil
     }
     
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        finish(html: nil, cookies: [], userAgent: nil)
+    // MARK: - WKNavigationDelegate
+    
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        
     }
     
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        LogManager.shared.log(serviceId: "system", text: "SolverServer WebView didFailProvisionalNavigation: \(error.localizedDescription) (code: \((error as NSError).code))", isError: true)
+        finish(html: nil, cookies: [], userAgent: nil)
+    }
+    
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        LogManager.shared.log(serviceId: "system", text: "SolverServer WebView didFail: \(error.localizedDescription) (code: \((error as NSError).code))", isError: true)
         finish(html: nil, cookies: [], userAgent: nil)
     }
 }
@@ -144,9 +327,9 @@ public final class SolverWebViewManager: NSObject {
         super.init()
     }
     
-    public func solve(urlString: String, completion: @escaping (String?, [HTTPCookie], String?) -> Void) {
+    public func solve(urlString: String, proxyHost: String?, proxyPort: Int?, completion: @escaping (String?, [HTTPCookie], String?) -> Void) {
         let sessionId = UUID()
-        let session = SolveSession(id: sessionId, urlString: urlString, completion: completion) { [weak self] in
+        let session = SolveSession(id: sessionId, urlString: urlString, proxyHost: proxyHost, proxyPort: proxyPort, completion: completion) { [weak self] in
             guard let self = self else { return }
             self.activeSessions[sessionId] = nil
         }
@@ -335,11 +518,20 @@ public final class SolverServer: @unchecked Sendable {
             return
         }
         
+        let proxyDict = json["proxy"] as? [String: Any]
+        let proxyUrlString = proxyDict?["url"] as? String ?? ""
+        var proxyHost: String? = nil
+        var proxyPort: Int? = nil
+        if let proxyURL = URL(string: proxyUrlString) {
+            proxyHost = proxyURL.host
+            proxyPort = proxyURL.port
+        }
+        
         LogManager.shared.log(serviceId: "system", text: "SolverServer: Solving challenge for URL: \(urlString)")
         
         // Execute solver on the @MainActor
         DispatchQueue.main.async {
-            SolverWebViewManager.shared.solve(urlString: urlString) { html, cookies, userAgent in
+            SolverWebViewManager.shared.solve(urlString: urlString, proxyHost: proxyHost, proxyPort: proxyPort) { html, cookies, userAgent in
                 self.queue.async {
                     LogManager.shared.log(serviceId: "system", text: "SolverServer: Solve completed. Cookies: \(cookies.count), UserAgent: \(userAgent ?? "")")
                     let responseJson = self.formatResponse(url: urlString, html: html ?? "", cookies: cookies, userAgent: userAgent ?? "")
@@ -350,6 +542,10 @@ public final class SolverServer: @unchecked Sendable {
     }
     
     private func formatResponse(url: String, html: String, cookies: [HTTPCookie], userAgent: String) -> String {
+        let cleanUA = userAgent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty 
+            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15" 
+            : userAgent
+            
         var cookieDicts: [[String: Any]] = []
         for cookie in cookies {
             cookieDicts.append([
@@ -368,7 +564,7 @@ public final class SolverServer: @unchecked Sendable {
                 "url": url,
                 "status": 200,
                 "cookies": cookieDicts,
-                "userAgent": userAgent,
+                "userAgent": cleanUA,
                 "response": html
             ]
         ]

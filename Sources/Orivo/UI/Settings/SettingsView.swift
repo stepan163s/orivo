@@ -417,6 +417,69 @@ public struct SettingsView: View {
             .background(Color.white.opacity(0.04))
             .cornerRadius(12)
             
+            // Cloudflare Solver group
+            VStack(alignment: .leading, spacing: 12) {
+                Text(loc.currentLanguage == "ru" ? "Встроенный Cloudflare Solver" : "Internal Cloudflare Solver")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.4))
+                
+                Toggle(loc.currentLanguage == "ru" ? "Использовать встроенный Solver" : "Use Internal Solver", isOn: Binding(
+                    get: { settingsManager.settings.useInternalSolver },
+                    set: { newValue in
+                        settingsManager.updateSetting(\.useInternalSolver, value: newValue)
+                        if newValue {
+                            SolverServer.shared.start()
+                        } else {
+                            SolverServer.shared.stop()
+                        }
+                    }
+                ))
+                .toggleStyle(CheckboxToggleStyle())
+                
+                if settingsManager.settings.useInternalSolver {
+                    Toggle(loc.currentLanguage == "ru" ? "Использовать прокси для Solver" : "Use Proxy for Solver", isOn: Binding(
+                        get: { settingsManager.settings.useSolverProxy },
+                        set: { settingsManager.updateSetting(\.useSolverProxy, value: $0) }
+                    ))
+                    .toggleStyle(CheckboxToggleStyle())
+                    
+                    if settingsManager.settings.useSolverProxy {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(loc.currentLanguage == "ru" ? "Адрес прокси" : "Proxy Host")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.white.opacity(0.6))
+                                
+                                TextField("127.0.0.1", text: Binding(
+                                    get: { settingsManager.settings.solverProxyHost },
+                                    set: { settingsManager.updateSetting(\.solverProxyHost, value: $0) }
+                                ))
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .font(.system(size: 12))
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(loc.currentLanguage == "ru" ? "Порт прокси" : "Proxy Port")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.white.opacity(0.6))
+                                
+                                TextField("12334", value: Binding(
+                                    get: { settingsManager.settings.solverProxyPort },
+                                    set: { settingsManager.updateSetting(\.solverProxyPort, value: $0) }
+                                ), formatter: NumberFormatter())
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .font(.system(size: 12))
+                                .frame(width: 80)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            
             // Jackett Indexers
             if settingsManager.settings.useJackett {
                 VStack(alignment: .leading, spacing: 12) {
