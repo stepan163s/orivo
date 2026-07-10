@@ -18,6 +18,7 @@ public struct MovieDetailView: View {
     @State private var seasonDetail: TMDBSeasonDetail? = nil
     @State private var isLoading: Bool = false
     @State private var isLoadingSeason: Bool = false
+    @State private var showSpinner: Bool = false
     
     // Torrent Search trigger states
     @State private var activeSearchQuery: SearchQuery? = nil
@@ -62,8 +63,10 @@ public struct MovieDetailView: View {
             // Main Content ZStack
             ZStack {
                 if isLoading {
-                    ProgressView()
-                        .transition(.opacity)
+                    if showSpinner {
+                        ProgressView()
+                            .transition(.opacity)
+                    }
                 } else if let details = details {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
@@ -521,6 +524,19 @@ public struct MovieDetailView: View {
     private func loadDetails() async {
         let overallStartTime = Date()
         isLoading = true
+        showSpinner = false
+        
+        let delaySpinnerTask = Task {
+            try? await Task.sleep(nanoseconds: 350_000_000) // 350ms delay
+            if !Task.isCancelled {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.showSpinner = true
+                    }
+                }
+            }
+        }
+        
         do {
             let isTV = media.mediaType == "tv" || media.releaseDate == nil
             let fetchedDetails: TMDBMediaDetail
@@ -534,6 +550,7 @@ public struct MovieDetailView: View {
             let totalDuration = Date().timeIntervalSince(overallStartTime) * 1000
             LogManager.shared.log(serviceId: "system", text: "Preload: TOTAL details load pipeline completed in \(String(format: "%.1f", totalDuration))ms")
             
+            delaySpinnerTask.cancel()
             await MainActor.run {
                 if let clickTime = PreloadTracker.shared.pop(for: media.id) {
                     let perceivedDuration = Date().timeIntervalSince(clickTime) * 1000
@@ -568,6 +585,7 @@ public struct MovieDetailView: View {
                 }
             }
         } catch {
+            delaySpinnerTask.cancel()
             print("Failed to load TMDB details: \(error.localizedDescription)")
             await MainActor.run {
                 withAnimation(.easeInOut(duration: 0.25)) {
