@@ -839,7 +839,9 @@ struct RankMovieCard: View {
     var body: some View {
         Button(action: {
             PreloadTracker.shared.startPreload(media: media)
-            onSelect(media)
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                onSelect(media)
+            }
         }) {
             ZStack(alignment: .topTrailing) {
                 CachedAsyncImage(url: media.posterURL) { image in
@@ -927,7 +929,9 @@ struct MovieCard: View {
     var body: some View {
         Button(action: {
             PreloadTracker.shared.startPreload(media: media)
-            onSelect(media)
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                onSelect(media)
+            }
         }) {
             VStack(alignment: .leading, spacing: 6) {
                 // Poster Image

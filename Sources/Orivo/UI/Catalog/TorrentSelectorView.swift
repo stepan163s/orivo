@@ -25,7 +25,7 @@ public struct TorrentSelectorView: View {
     }
     
     @State private var torrents: [JackettResult] = []
-    @State private var isLoading: Bool = false
+    @State private var isLoading: Bool = true
     @State private var errorMessage: String? = nil
     @State private var sortBySeeders: Bool = true
     @State private var selectedCategory: String = "Все"
