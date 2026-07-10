@@ -840,10 +840,30 @@ struct RankMovieCard: View {
     let media: TMDBMedia
     let onSelect: (TMDBMedia) -> Void
     @State private var isHovered = false
+    @State private var isPressed = false
+    @AppStorage("cardTransitionStyle") private var cardTransitionStyle: String = "native"
     
     var body: some View {
         Button(action: {
-            onSelect(media)
+            // Start preloading immediately at millisecond 0!
+            PreloadTracker.shared.startPreload(media: media)
+            
+            if cardTransitionStyle == "spring" {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isPressed = true
+                }
+                Task {
+                    try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+                    await MainActor.run {
+                        onSelect(media)
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isPressed = false
+                        }
+                    }
+                }
+            } else {
+                onSelect(media)
+            }
         }) {
             ZStack(alignment: .topTrailing) {
                 CachedAsyncImage(url: media.posterURL) { image in
@@ -861,8 +881,9 @@ struct RankMovieCard: View {
                 .frame(width: 130, height: 195)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .shadow(radius: isHovered ? 8 : 2)
-                .scaleEffect(isHovered ? 1.03 : 1.0)
+                .scaleEffect(isPressed ? 0.95 : (isHovered ? 1.03 : 1.0))
                 .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+                .animation(.easeInOut(duration: 0.15), value: isPressed)
                 
                 // Rating tag
                 if let rating = media.voteAverage, rating > 0 {
@@ -932,6 +953,9 @@ struct MovieCard: View {
     
     var body: some View {
         Button(action: {
+            // Start preloading immediately at millisecond 0!
+            PreloadTracker.shared.startPreload(media: media)
+            
             if cardTransitionStyle == "spring" {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     isPressed = true

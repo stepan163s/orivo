@@ -13,7 +13,7 @@ public struct TMDBPageResponse<T: Codable>: Codable {
     }
 }
 
-public struct TMDBMedia: Codable, Identifiable, Hashable {
+public struct TMDBMedia: Codable, Identifiable, Hashable, Sendable {
     public let id: Int
     public let title: String?
     public let name: String? // For TV Shows
@@ -66,12 +66,12 @@ public struct TMDBMedia: Codable, Identifiable, Hashable {
     }
 }
 
-public struct TMDBGenre: Codable, Identifiable {
+public struct TMDBGenre: Codable, Identifiable, Sendable {
     public let id: Int
     public let name: String
 }
 
-public struct TMDBMediaDetail: Codable {
+public struct TMDBMediaDetail: Codable, Sendable {
     public let id: Int
     public let title: String?
     public let name: String?
@@ -136,11 +136,11 @@ public struct TMDBMediaDetail: Codable {
     }
 }
 
-public struct TMDBCredits: Codable {
+public struct TMDBCredits: Codable, Sendable {
     public let cast: [TMDBCast]
 }
 
-public struct TMDBCast: Codable, Identifiable {
+public struct TMDBCast: Codable, Identifiable, Sendable {
     public let id: Int
     public let name: String
     public let character: String

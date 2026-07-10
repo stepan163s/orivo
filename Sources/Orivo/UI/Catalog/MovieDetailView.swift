@@ -498,7 +498,7 @@ public struct MovieDetailView: View {
         }
     }
     
-    private static let prefetchSession: URLSession = {
+    static let prefetchSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.httpMaximumConnectionsPerHost = 20
         config.timeoutIntervalForRequest = 10.0
@@ -542,11 +542,18 @@ public struct MovieDetailView: View {
             let isTV = media.mediaType == "tv" || media.releaseDate == nil
             let fetchedDetails: TMDBMediaDetail
             
-            if isTV {
-                fetchedDetails = try await TMDBClient.shared.fetchTVShowDetails(id: media.id)
-                await loadSeasonEpisodes()
+            if let preloadedTask = PreloadTracker.shared.getPreloadedTask(for: media.id) {
+                fetchedDetails = try await preloadedTask.value
+                if isTV {
+                    await loadSeasonEpisodes()
+                }
             } else {
-                fetchedDetails = try await TMDBClient.shared.fetchMovieDetails(id: media.id)
+                if isTV {
+                    fetchedDetails = try await TMDBClient.shared.fetchTVShowDetails(id: media.id)
+                    await loadSeasonEpisodes()
+                } else {
+                    fetchedDetails = try await TMDBClient.shared.fetchMovieDetails(id: media.id)
+                }
             }
             let totalDuration = Date().timeIntervalSince(overallStartTime) * 1000
             LogManager.shared.log(serviceId: "system", text: "Preload: TOTAL details load pipeline completed in \(String(format: "%.1f", totalDuration))ms")
@@ -669,6 +676,7 @@ extension View {
 public final class PreloadTracker: @unchecked Sendable {
     public static let shared = PreloadTracker()
     private var clickTimes: [Int: Date] = [:]
+    private var preloadingTasks: [Int: Task<TMDBMediaDetail, any Error>] = [:]
     private let lock = NSLock()
     
     public func start(for mediaId: Int) {
@@ -682,5 +690,56 @@ public final class PreloadTracker: @unchecked Sendable {
         let time = clickTimes.removeValue(forKey: mediaId)
         lock.unlock()
         return time
+    }
+    
+    public func startPreload(media: TMDBMedia) {
+        lock.lock()
+        clickTimes[media.id] = Date()
+        
+        // If it's already preloading, do nothing
+        guard preloadingTasks[media.id] == nil else {
+            lock.unlock()
+            return
+        }
+        
+        let task = Task<TMDBMediaDetail, any Error> {
+            let isTV = media.mediaType == "tv" || media.releaseDate == nil
+            let fetchedDetails: TMDBMediaDetail
+            if isTV {
+                fetchedDetails = try await TMDBClient.shared.fetchTVShowDetails(id: media.id)
+            } else {
+                fetchedDetails = try await TMDBClient.shared.fetchMovieDetails(id: media.id)
+            }
+            
+            // Prefetch the poster in background immediately
+            if let posterURL = fetchedDetails.posterURL {
+                Task {
+                    _ = try? await PreloadTracker.preloadImage(url: posterURL)
+                }
+            }
+            
+            return fetchedDetails
+        }
+        preloadingTasks[media.id] = task
+        lock.unlock()
+    }
+    
+    public func getPreloadedTask(for mediaId: Int) -> Task<TMDBMediaDetail, any Error>? {
+        lock.lock()
+        let task = preloadingTasks.removeValue(forKey: mediaId)
+        lock.unlock()
+        return task
+    }
+    
+    public static func preloadImage(url: URL) async throws -> NSImage {
+        if let cached = ImageCache.shared.get(for: url) {
+            return cached
+        }
+        let (data, _) = try await MovieDetailView.prefetchSession.data(from: url)
+        guard let nsImage = NSImage(data: data) else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        ImageCache.shared.set(nsImage, for: url)
+        return nsImage
     }
 }
