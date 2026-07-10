@@ -6,6 +6,25 @@
     <description>Most recent updates for Orivo.</description>
     <language>ru</language>
     <item>
+      <title>Orivo 1.2.0 (Release)</title>
+      <pubDate>Thu, 10 Jul 2026 16:30:00 +0400</pubDate>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Что нового в Orivo 1.2.0:</h2>
+        <ul>
+          <li>Убраны фильтры категорий и увеличен таймаут — теперь находятся все раздачи.</li>
+          <li>Поиск по сезонным пакам вместо отдельных серий — намного больше результатов.</li>
+          <li>Значительно ускорен поиск и отображение раздач.</li>
+          <li>При клике на серию нужный файл из пака выбирается и запускается автоматически.</li>
+          <li>Плеер стартует мгновенно если торрент уже закеширован, без лишних окон загрузки.</li>
+          <li>Плавные анимации открытия/закрытия окон и списков раздач.</li>
+          <li>Минималистичный оверлей буферизации вместо громоздкого диалога.</li>
+          <li>Ускорена загрузка карточки фильма.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/stepan163s/orivo/releases/download/v1.2.0/Orivo.dmg" sparkle:version="1.2.0" sparkle:shortVersionString="1.2.0" length="34335067" type="application/octet-stream" sparkle:edSignature="8+O5hOyj+yVgR7X8/X7WkC44TkqmVpH1ehChYCjl4Gx/3QMCXqVahbPTxDzYDWxBWS7Jr6cKGtkBac7b5ggMAQ==" />
+    </item>
+    <item>
       <title>Orivo 1.1.2 (Release)</title>
       <pubDate>Thu, 09 Jul 2026 15:22:00 +0400</pubDate>
       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
