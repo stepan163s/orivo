@@ -36,160 +36,156 @@ public struct MovieDetailView: View {
         ZStack {
             // Blurred backdrop background
             ZStack {
-                if let details = details {
-                    CachedAsyncImage(url: details.posterURL) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Color.black
-                    }
-                    .frame(width: 800, height: 600)
-                    .clipped()
-                    .ignoresSafeArea()
-                    .blur(radius: 40)
-                    .overlay(Color.black.opacity(0.6))
-                    .transition(.opacity)
-                } else {
-                    Color.black.opacity(0.8)
-                        .frame(width: 800, height: 600)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
+                CachedAsyncImage(url: details?.posterURL ?? media.posterURL) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Color.black
                 }
+                .frame(width: 800, height: 600)
+                .clipped()
+                .ignoresSafeArea()
+                .blur(radius: 40)
+                .overlay(Color.black.opacity(0.6))
+                .transition(.opacity)
             }
             .frame(width: 800, height: 600)
             .clipped()
-            .animation(.easeInOut(duration: 0.3), value: details != nil)
             
-            // Main Content ZStack
-            ZStack {
-                if isLoading {
-                    if showSpinner {
-                        ProgressView()
-                            .transition(.opacity)
-                    }
-                } else if let details = details {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
-                            // Main info row
-                            HStack(alignment: .top, spacing: 24) {
-                            // Poster
-                            CachedAsyncImage(url: details.posterURL) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white.opacity(0.06))
-                            }
-                            .frame(width: 200, height: 300)
-                            .cornerRadius(12)
-                            .shadow(radius: 10)
+            // Main Content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Main info row
+                    HStack(alignment: .top, spacing: 24) {
+                        // Poster
+                        CachedAsyncImage(url: details?.posterURL ?? media.posterURL) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.white.opacity(0.06))
+                        }
+                        .frame(width: 200, height: 300)
+                        .cornerRadius(12)
+                        .shadow(radius: 10)
+                        
+                        // Text Metadata Info
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(details?.computedTitle ?? media.computedTitle)
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
                             
-                            // Text Metadata Info
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text(details.computedTitle)
-                                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
-                                
-                                HStack(spacing: 12) {
-                                    if let rating = details.voteAverage, rating > 0 {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "star.fill")
-                                                .foregroundColor(.yellow)
-                                            Text(String(format: "%.1f", rating))
-                                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                        }
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.white.opacity(0.1))
-                                        .cornerRadius(6)
+                            HStack(spacing: 12) {
+                                if let rating = details?.voteAverage ?? media.voteAverage, rating > 0 {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "star.fill")
+                                            .foregroundColor(.yellow)
+                                        Text(String(format: "%.1f", rating))
+                                            .font(.system(size: 12, weight: .bold, design: .rounded))
                                     }
-                                    
-                                    Text(details.computedReleaseYear)
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.6))
-                                    
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(6)
+                                }
+                                
+                                Text(details?.computedReleaseYear ?? media.computedReleaseYear)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.6))
+                                
+                                if let details = details {
                                     if !details.runtimeString.isEmpty {
                                         Text(details.runtimeString)
                                             .font(.system(size: 12, weight: .medium))
                                             .foregroundColor(.white.opacity(0.6))
                                     }
+                                } else {
+                                    SkeletonBlock(width: 60, height: 16)
                                 }
-                                
+                            }
+                            
+                            if let details = details {
                                 Text(details.genresString)
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.white.opacity(0.5))
-                                
-                                Text(details.overview ?? "Описание отсутствует.")
-                                    .font(.system(size: 14, weight: .regular, design: .rounded))
-                                    .foregroundColor(.white.opacity(0.9))
-                                    .lineSpacing(4)
-                                    .padding(.top, 8)
-                                
-                                // Watch / Bookmark Actions Row
-                                HStack(spacing: 12) {
-                                    if details.numberOfSeasons == nil {
-                                        Button(action: {
-                                            LibraryManager.shared.addToHistory(media: media)
-                                            activeSearchQuery = SearchQuery(text: details.computedTitle)
-                                            activeSearchTitle = details.computedTitle
-                                        }) {
-                                            HStack(spacing: 8) {
-                                                Image(systemName: "play.fill")
-                                                Text("Торренты")
-                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                            }
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 10)
-                                            .background(Color.blue)
-                                            .foregroundColor(.white)
-                                            .cornerRadius(8)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                        
-                                        Button(action: {
-                                            fetchOnlineStreams()
-                                        }) {
-                                            HStack(spacing: 8) {
-                                                Image(systemName: "globe")
-                                                Text("Смотреть онлайн")
-                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                            }
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 10)
-                                            .background(Color.green)
-                                            .foregroundColor(.white)
-                                            .cornerRadius(8)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                    }
-                                    
-                                    let isFav = LibraryManager.shared.isFavorite(media: media)
+                            } else {
+                                SkeletonBlock(width: 140, height: 16)
+                            }
+                            
+                            Text(details?.overview ?? media.overview ?? "Описание отсутствует.")
+                                .font(.system(size: 14, weight: .regular, design: .rounded))
+                                .foregroundColor(.white.opacity(0.9))
+                                .lineSpacing(4)
+                                .padding(.top, 8)
+                            
+                            // Watch / Bookmark Actions Row
+                            HStack(spacing: 12) {
+                                let isTV = media.mediaType == "tv" || media.releaseDate == nil
+                                if !isTV {
                                     Button(action: {
-                                        LibraryManager.shared.toggleFavorite(media: media)
+                                        LibraryManager.shared.addToHistory(media: media)
+                                        activeSearchQuery = SearchQuery(text: details?.computedTitle ?? media.computedTitle)
+                                        activeSearchTitle = details?.computedTitle ?? media.computedTitle
                                     }) {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: isFav ? "checkmark" : "plus")
-                                                .font(.system(size: 13, weight: .bold))
-                                            Text(isFav ? "В избранном" : "В избранное")
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "play.fill")
+                                            Text("Торренты")
                                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                         }
                                         .padding(.horizontal, 20)
                                         .padding(.vertical, 10)
-                                        .background(Color.white.opacity(0.15))
+                                        .background(Color.blue)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(8)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    Button(action: {
+                                        fetchOnlineStreams()
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "globe")
+                                            Text("Смотреть онлайн")
+                                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                        }
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 10)
+                                        .background(Color.green)
                                         .foregroundColor(.white)
                                         .cornerRadius(8)
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                 }
-                                .padding(.top, 12)
+                                
+                                let isFav = LibraryManager.shared.isFavorite(media: media)
+                                Button(action: {
+                                    LibraryManager.shared.toggleFavorite(media: media)
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: isFav ? "checkmark" : "plus")
+                                            .font(.system(size: 13, weight: .bold))
+                                        Text(isFav ? "В избранном" : "В избранное")
+                                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(Color.white.opacity(0.15))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
+                            .padding(.top, 12)
                         }
-                        .padding(.horizontal, 24)
-                        
-                        // TV Show Seasons & Episode details
-                        if let seasonsCount = details.numberOfSeasons, seasonsCount > 0 {
+                    }
+                    .padding(.horizontal, 24)
+                    
+                    // TV Show Seasons & Episode details
+                    let isTV = media.mediaType == "tv" || media.releaseDate == nil
+                    if isTV {
+                        if let details = details, let seasonsCount = details.numberOfSeasons, seasonsCount > 0 {
                             VStack(alignment: .leading, spacing: 16) {
                                 Divider()
                                     .background(Color.white.opacity(0.1))
@@ -201,7 +197,6 @@ public struct MovieDetailView: View {
                                     
                                     Spacer()
                                     
-                                    // Season Picker Dropdown menu
                                     Picker("Сезон", selection: $selectedSeason) {
                                         ForEach(1...seasonsCount, id: \.self) { s in
                                             Text("Сезон \(s)").tag(s)
@@ -216,18 +211,10 @@ public struct MovieDetailView: View {
                                     }
                                 }
                                 
-                                if isLoadingSeason {
-                                    HStack {
-                                        Spacer()
-                                        ProgressView()
-                                        Spacer()
-                                    }
-                                    .frame(height: 150)
-                                } else if let season = seasonDetail {
+                                if let season = seasonDetail {
                                     LazyVStack(spacing: 12) {
                                         ForEach(season.episodes) { ep in
                                             HStack(alignment: .top, spacing: 16) {
-                                                // Still Thumbnail
                                                 CachedAsyncImage(url: ep.stillURL) { image in
                                                     image
                                                         .resizable()
@@ -239,32 +226,35 @@ public struct MovieDetailView: View {
                                                 }
                                                 .frame(width: 120, height: 75)
                                                 .cornerRadius(6)
+                                                .clipped()
                                                 
-                                                // Episode Info
-                                                VStack(alignment: .leading, spacing: 4) {
+                                                VStack(alignment: .leading, spacing: 6) {
                                                     Text("\(ep.episodeNumber). \(ep.name)")
-                                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                        .font(.system(size: 14, weight: .bold, design: .rounded))
                                                         .foregroundColor(.white)
                                                     
-                                                    Text(ep.overview ?? "")
-                                                        .font(.system(size: 11, weight: .regular))
-                                                        .foregroundColor(.white.opacity(0.7))
-                                                        .lineLimit(3)
+                                                    if let air = ep.airDate, !air.isEmpty {
+                                                        Text(air)
+                                                            .font(.system(size: 10))
+                                                            .foregroundColor(.white.opacity(0.4))
+                                                    }
+                                                    
+                                                    if let overview = ep.overview, !overview.isEmpty {
+                                                        Text(overview)
+                                                            .font(.system(size: 12))
+                                                            .foregroundColor(.white.opacity(0.7))
+                                                            .lineLimit(2)
+                                                    }
                                                 }
-                                                
                                                 Spacer()
                                                 
-                                                // Play Episode Button
                                                 Button(action: {
                                                     LibraryManager.shared.addToHistory(media: media)
-                                                    // Search for Series SxxExx torrents
-                                                    let sStr = String(format: "%02d", selectedSeason)
-                                                    let eStr = String(format: "%02d", ep.episodeNumber)
-                                                    activeSearchQuery = SearchQuery(text: "\(details.computedTitle) S\(sStr)E\(eStr)")
-                                                    activeSearchTitle = "\(details.computedTitle) - С\(selectedSeason)Э\(ep.episodeNumber) \"\(ep.name)\""
+                                                    activeSearchQuery = SearchQuery(text: "\(details.computedTitle) s\(String(format: "%02d", selectedSeason))e\(String(format: "%02d", ep.episodeNumber))")
+                                                    activeSearchTitle = "\(details.computedTitle) - s\(String(format: "%02d", selectedSeason))e\(String(format: "%02d", ep.episodeNumber))"
                                                 }) {
                                                     Image(systemName: "play.circle.fill")
-                                                        .font(.system(size: 28))
+                                                        .font(.system(size: 26))
                                                         .foregroundColor(.blue)
                                                 }
                                                 .buttonStyle(PlainButtonStyle())
@@ -278,62 +268,108 @@ public struct MovieDetailView: View {
                                 }
                             }
                             .padding(.horizontal, 24)
-                        }
-                        
-                        // Cast list
-                        if let cast = details.credits?.cast, !cast.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
+                        } else {
+                            // Shimmering Season Loader placeholder
+                            VStack(alignment: .leading, spacing: 16) {
                                 Divider()
                                     .background(Color.white.opacity(0.1))
-                                
-                                Text("В главных ролях")
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
-                                
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 16) {
-                                        ForEach(cast.prefix(12)) { actor in
-                                            VStack {
-                                                CachedAsyncImage(url: actor.profileURL) { image in
-                                                    image
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fill)
-                                                } placeholder: {
-                                                    Circle()
-                                                        .fill(Color.white.opacity(0.06))
-                                                        .overlay(Image(systemName: "person.fill").foregroundColor(.white.opacity(0.2)))
-                                                }
-                                                .frame(width: 60, height: 60)
-                                                .clipShape(Circle())
-                                                
-                                                Text(actor.name)
-                                                    .font(.system(size: 10, weight: .bold))
-                                                    .foregroundColor(.white)
-                                                    .lineLimit(1)
-                                                    .frame(width: 80)
-                                                
-                                                Text(actor.character)
-                                                    .font(.system(size: 9))
-                                                    .foregroundColor(.white.opacity(0.5))
-                                                    .lineLimit(1)
-                                                    .frame(width: 80)
+                                HStack {
+                                    SkeletonBlock(width: 80, height: 24)
+                                    Spacer()
+                                    SkeletonBlock(width: 140, height: 24)
+                                }
+                                VStack(spacing: 12) {
+                                    ForEach(0..<3) { _ in
+                                        HStack(spacing: 16) {
+                                            SkeletonBlock(width: 120, height: 75)
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                SkeletonBlock(width: 150, height: 16)
+                                                SkeletonBlock(width: 250, height: 30)
                                             }
+                                            Spacer()
                                         }
                                     }
                                 }
                             }
                             .padding(.horizontal, 24)
-                            .padding(.top, 12)
                         }
-                        }
-                        .padding(.top, 64)
-                        .padding(.bottom, 40)
-                        .frame(maxWidth: .infinity)
                     }
-                    .transition(.opacity)
+                    
+                    // Cast list
+                    if let details = details, let cast = details.credits?.cast, !cast.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Divider()
+                                .background(Color.white.opacity(0.1))
+                            
+                            Text("В главных ролях")
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 16) {
+                                    ForEach(cast.prefix(12)) { actor in
+                                        VStack {
+                                            CachedAsyncImage(url: actor.profileURL) { image in
+                                                image
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                            } placeholder: {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.06))
+                                                    .overlay(Image(systemName: "person.fill").foregroundColor(.white.opacity(0.2)))
+                                            }
+                                            .frame(width: 60, height: 60)
+                                            .clipShape(Circle())
+                                            
+                                            Text(actor.name)
+                                                .font(.system(size: 10, weight: .bold))
+                                                .foregroundColor(.white)
+                                                .lineLimit(1)
+                                                .frame(width: 80)
+                                            
+                                            Text(actor.character)
+                                                .font(.system(size: 9))
+                                                .foregroundColor(.white.opacity(0.5))
+                                                .lineLimit(1)
+                                                .frame(width: 80)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
+                    } else {
+                        // Shimmering Cast Loader placeholder
+                        VStack(alignment: .leading, spacing: 12) {
+                            Divider()
+                                .background(Color.white.opacity(0.1))
+                            Text("В главных ролях")
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 16) {
+                                    ForEach(0..<6) { _ in
+                                        VStack(spacing: 8) {
+                                            Circle()
+                                                .fill(Color.white.opacity(0.06))
+                                                .frame(width: 60, height: 60)
+                                            SkeletonBlock(width: 70, height: 10)
+                                            SkeletonBlock(width: 50, height: 8)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
+                    }
                 }
+                .padding(.top, 64)
+                .padding(.bottom, 40)
+                .frame(maxWidth: .infinity)
             }
-            .animation(.easeInOut(duration: 0.2), value: isLoading)
             
             // Header Bar with Close Button (Always on top)
             VStack {
@@ -741,5 +777,22 @@ public final class PreloadTracker: @unchecked Sendable {
         }
         ImageCache.shared.set(nsImage, for: url)
         return nsImage
+    }
+}
+
+struct SkeletonBlock: View {
+    let width: CGFloat
+    let height: CGFloat
+    @State private var isAnimating = false
+    
+    var body: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(Color.white.opacity(0.08))
+            .frame(width: width, height: height)
+            .opacity(isAnimating ? 0.35 : 1.0)
+            .animation(.easeInOut(duration: 0.95).repeatForever(autoreverses: true), value: isAnimating)
+            .onAppear {
+                isAnimating = true
+            }
     }
 }
