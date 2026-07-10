@@ -31,133 +31,94 @@ public struct BufferingOverlayView: View {
         ZStack {
             // Dark glassmorphic background
             VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
-                .overlay(Color.black.opacity(0.4))
+                .overlay(Color.black.opacity(0.3))
                 .ignoresSafeArea()
             
-            VStack(spacing: 24) {
-                // Header / Movie Title
-                VStack(spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    Text(filename)
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.4))
-                        .lineLimit(1)
-                        .frame(maxWidth: 320)
+            VStack(spacing: 14) {
+                // Header (Title & Filename)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Text(filename)
+                            .font(.system(size: 9))
+                            .foregroundColor(.white.opacity(0.4))
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    
+                    Button(action: {
+                        stopTimer()
+                        onClose()
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white.opacity(0.6))
+                            .frame(width: 20, height: 20)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
                 
-                // Ring with glowing progress indicator
-                ZStack {
-                    Circle()
-                        .stroke(Color.white.opacity(0.06), lineWidth: 8)
-                        .frame(width: 140, height: 140)
-                    
-                    Circle()
-                        .trim(from: 0.0, to: CGFloat(progress))
-                        .stroke(
+                // Horizontal Progress Bar
+                VStack(spacing: 4) {
+                    ProgressView(value: progress)
+                        .tint(
                             LinearGradient(
                                 colors: [Color.blue, Color.purple],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
                         )
-                        .rotationEffect(Angle(degrees: -90))
-                        .frame(width: 140, height: 140)
-                        .shadow(color: Color.blue.opacity(0.35), radius: 6)
-                        .animation(.linear(duration: 0.4), value: progress)
+                        .scaleEffect(x: 1, y: 1.5, anchor: .center)
                     
-                    VStack(spacing: 6) {
-                        Text(String(format: "%.0f%%", progress * 100))
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        
+                    HStack {
                         Text(statusString)
                             .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.white.opacity(0.6))
-                            .textCase(.uppercase)
-                            .tracking(1.0)
+                            .foregroundColor(.white.opacity(0.5))
+                        Spacer()
+                        Text(String(format: "%.0f%%", progress * 100))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
                     }
                 }
-                .padding(.vertical, 8)
                 
-                // Stats HUD bar
-                HStack(spacing: 0) {
-                    // Speed
-                    HStack(spacing: 8) {
+                // Speed & Peers stats row
+                HStack {
+                    HStack(spacing: 4) {
                         Image(systemName: "arrow.down.circle")
                             .foregroundColor(.blue)
-                            .font(.system(size: 14))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("СКОРОСТЬ")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(.white.opacity(0.4))
-                            Text(speedString)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundColor(.white)
-                        }
+                            .font(.system(size: 11))
+                        Text(speedString)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
                     }
                     
                     Spacer()
                     
-                    Divider()
-                        .frame(height: 24)
-                        .background(Color.white.opacity(0.1))
-                    
-                    Spacer()
-                    
-                    // Peers
-                    HStack(spacing: 8) {
+                    HStack(spacing: 4) {
                         Image(systemName: "person.2")
                             .foregroundColor(.purple)
-                            .font(.system(size: 14))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("ПИРЫ")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(.white.opacity(0.4))
-                            Text("\(peersCount) / \(totalPeers)")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundColor(.white)
-                        }
+                            .font(.system(size: 11))
+                        Text("\(peersCount) / \(totalPeers)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
                 .background(Color.white.opacity(0.03))
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.white.opacity(0.05), lineWidth: 1)
-                )
-                .frame(width: 320)
-                
-                // Frosted Cancel Button
-                Button(action: {
-                    stopTimer()
-                    onClose()
-                }) {
-                    Text("Отмена")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 8)
-                        .background(Color.red.opacity(0.15))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(PlainButtonStyle())
+                .cornerRadius(6)
             }
-            .padding(24)
+            .padding(16)
         }
-        .frame(width: 380, height: 410)
-        .cornerRadius(24)
+        .frame(width: 340, height: 130)
+        .cornerRadius(16)
         .overlay(
-            RoundedRectangle(cornerRadius: 24)
+            RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
         .onAppear {
@@ -170,7 +131,6 @@ public struct BufferingOverlayView: View {
     
     private func startTimer() {
         LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: startTimer called for hash \(hash), fileIndex \(fileIndex)")
-        // Query status immediately
         queryStatus()
         
         statusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
@@ -191,7 +151,6 @@ public struct BufferingOverlayView: View {
         Task {
             do {
                 let statusResponse = try await TorrServerClient.shared.getTorrentStatus(hash: hash)
-                LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: queryStatus - status: \(statusResponse.status ?? -1), progress: \(statusResponse.bufferingProgress), peers: \(statusResponse.active_peers ?? 0)/\(statusResponse.total_peers ?? 0)")
                 
                 // Update stats
                 self.progress = statusResponse.bufferingProgress
@@ -221,15 +180,10 @@ public struct BufferingOverlayView: View {
     
     private func playVideo() {
         let playURL = TorrServerClient.shared.getPlayURL(hash: hash, fileIndex: fileIndex, filename: filename)
-        LogManager.shared.log(serviceId: "system", text: "BufferingOverlayView: playVideo called. URL: \(playURL)")
         
         DispatchQueue.main.async {
-            // Post notification to dismiss parent sheets first so player isn't covered
             NotificationCenter.default.post(name: NSNotification.Name("CloseCatalogSheets"), object: nil)
-            
-            // Launch native full-screen PlayerView
             AppStateManager.shared.play(url: playURL, title: title, mediaId: mediaId, kinoriumID: kinoriumId)
-            // Close buffer overlay sheet
             onClose()
         }
     }
