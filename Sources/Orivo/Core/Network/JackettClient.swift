@@ -86,7 +86,7 @@ public final class JackettClient: Sendable {
     
     private init() {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10.0
+        config.timeoutIntervalForRequest = 30.0
         config.httpMaximumConnectionsPerHost = 15
         self.session = URLSession(configuration: config)
     }
@@ -138,10 +138,7 @@ public final class JackettClient: Sendable {
         var urlComponents = URLComponents(string: "\(base)/api/v2.0/indexers/all/results")
         urlComponents?.queryItems = [
             URLQueryItem(name: "apikey", value: apiKey),
-            URLQueryItem(name: "Query", value: query),
-            URLQueryItem(name: "Category[]", value: "2000"),
-            URLQueryItem(name: "Category[]", value: "5000"),
-            URLQueryItem(name: "Category[]", value: "8000")
+            URLQueryItem(name: "Query", value: query)
         ]
         
         guard let url = urlComponents?.url else {

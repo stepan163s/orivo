@@ -250,112 +250,45 @@ public struct PlayerView: View {
             // Translucent Buffering Overlay
             if isTorrServerBuffering {
                 ZStack {
-                    Color.black.opacity(0.8)
+                    Color.black.opacity(0.85)
                         .ignoresSafeArea()
                     
-                    // Sleek Glassmorphic Buffer Card
-                    ZStack {
-                        VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
-                            .overlay(Color.black.opacity(0.4))
-                        
-                        VStack(spacing: 14) {
-                            // Header
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(title)
-                                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white)
-                                        .lineLimit(1)
-                                    Text("Загрузка и буферизация торрента...")
-                                        .font(.system(size: 9))
-                                        .foregroundColor(.white.opacity(0.4))
-                                }
-                                Spacer()
-                                
-                                Button(action: {
-                                    bufferTimer?.invalidate()
-                                    bufferTimer = nil
-                                    onClose()
-                                }) {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.white.opacity(0.6))
-                                        .frame(width: 20, height: 20)
-                                        .background(Color.white.opacity(0.1))
-                                        .clipShape(Circle())
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                            
-                            // Horizontal Progress Bar
-                            VStack(spacing: 4) {
-                                ProgressView(value: bufferingProgress)
-                                    .tint(
-                                        LinearGradient(
-                                            colors: [Color.blue, Color.purple],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .scaleEffect(x: 1, y: 1.5, anchor: .center)
-                                
-                                HStack {
-                                    Text(bufferingProgress >= 0.01 ? "Заполнение буфера..." : "Подключение к пирам...")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(.white.opacity(0.5))
-                                    Spacer()
-                                    Text(String(format: "%.0f%%", bufferingProgress * 100))
-                                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white)
-                                }
-                            }
-                            
-                            // Speed & Peers stats row
-                            HStack {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.down.circle")
-                                        .foregroundColor(.blue)
-                                        .font(.system(size: 11))
-                                    Text(bufferingSpeed.isEmpty ? "0 КБ/с" : bufferingSpeed)
-                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.white.opacity(0.9))
-                                }
-                                
-                                Spacer()
-                                
-                                HStack(spacing: 4) {
-                                    Image(systemName: "person.2")
-                                        .foregroundColor(.purple)
-                                        .font(.system(size: 11))
-                                    Text(bufferingPeers.isEmpty ? "0 / 0" : bufferingPeers)
-                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.white.opacity(0.9))
-                                }
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.03))
-                            .cornerRadius(6)
-                        }
-                        .padding(16)
+                    // Center: Simple Loader Spinner
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                            .tint(.white)
+                        Text("Буферизация видеопотока...")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.8))
                     }
-                    .frame(width: 340, height: 130)
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.12),
-                                        Color.white.opacity(0.03)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-                    .shadow(color: Color.black.opacity(0.3), radius: 15, x: 0, y: 8)
+                    
+                    // Bottom: Minimalist Stats & Cancel Button
+                    VStack {
+                        Spacer()
+                        
+                        VStack(spacing: 10) {
+                            Text("\(bufferingSpeed.isEmpty ? "0 КБ/с" : bufferingSpeed)  •  \(bufferingPeers.isEmpty ? "0 / 0" : bufferingPeers) пиров")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.6))
+                            
+                            Button(action: {
+                                bufferTimer?.invalidate()
+                                bufferTimer = nil
+                                onClose()
+                            }) {
+                                Text("Отмена")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.12))
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                        .padding(.bottom, 48)
+                    }
                 }
                 .transition(.opacity)
                 .zIndex(10)
