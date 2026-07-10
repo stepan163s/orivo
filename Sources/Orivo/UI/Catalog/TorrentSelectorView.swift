@@ -14,13 +14,15 @@ public struct TorrentSelectorView: View {
     let title: String
     let mediaId: Int?
     let kinoriumId: String?
+    let targetEpisodeNumber: Int?
     let onClose: () -> Void
     
-    public init(query: String, title: String, mediaId: Int? = nil, kinoriumId: String? = nil, onClose: @escaping () -> Void) {
+    public init(query: String, title: String, mediaId: Int? = nil, kinoriumId: String? = nil, targetEpisodeNumber: Int? = nil, onClose: @escaping () -> Void) {
         self.query = query
         self.title = title
         self.mediaId = mediaId
         self.kinoriumId = kinoriumId
+        self.targetEpisodeNumber = targetEpisodeNumber
         self.onClose = onClose
     }
     
@@ -441,15 +443,25 @@ public struct TorrentSelectorView: View {
                     LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Single video pack, auto play: \(videoFiles[0].filename)")
                     startBuffering(hash: hash, fileIndex: videoFiles[0].index, filename: videoFiles[0].filename)
                 } else {
-                    LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Multi-file pack, prompting file picker")
-                    await MainActor.run {
-                        withAnimation {
-                            self.activeTorrentId = nil
-                        }
-                        self.resolvedFiles = videoFiles
-                        self.resolvedHash = hash
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                            self.showFilePicker = true
+                    // Try to auto-match the specific episode the user clicked
+                    let matchedFile: TorrServerFile? = targetEpisodeNumber.flatMap { epNum in
+                        videoFiles.first { fileMatchesEpisode(path: $0.path, episodeNum: epNum) }
+                    }
+                    
+                    if let matched = matchedFile {
+                        LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Auto-matched episode \(targetEpisodeNumber!): \(matched.filename)")
+                        startBuffering(hash: hash, fileIndex: matched.index, filename: matched.filename)
+                    } else {
+                        LogManager.shared.log(serviceId: "system", text: "TorrentSelectorView: Multi-file pack, prompting file picker")
+                        await MainActor.run {
+                            withAnimation {
+                                self.activeTorrentId = nil
+                            }
+                            self.resolvedFiles = videoFiles
+                            self.resolvedHash = hash
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                self.showFilePicker = true
+                            }
                         }
                     }
                 }
@@ -664,6 +676,39 @@ public struct TorrentSelectorView: View {
             }
             .buttonStyle(PlainButtonStyle())
         }
+    }
+    
+    private func fileMatchesEpisode(path: String, episodeNum: Int) -> Bool {
+        let filename = (path as NSString).lastPathComponent.lowercased()
+        
+        // 1. SxxExx format: s01e01, s01.01, s01-01, s01_01
+        let sPattern = "s\\d+[.\\-_]?e?(\\d+)"
+        if let regex = try? NSRegularExpression(pattern: sPattern),
+           let match = regex.firstMatch(in: filename, range: NSRange(filename.startIndex..., in: filename)),
+           let range = Range(match.range(at: 1), in: filename),
+           let num = Int(filename[range]), num == episodeNum {
+            return true
+        }
+        
+        // 2. Standalone ep/e prefix: e01, ep01, ep_01
+        let ePattern = "(?:^|[^s])(?:ep_?|e)(\\d+)\\b"
+        if let regex = try? NSRegularExpression(pattern: ePattern),
+           let match = regex.firstMatch(in: filename, range: NSRange(filename.startIndex..., in: filename)),
+           let range = Range(match.range(at: 1), in: filename),
+           let num = Int(filename[range]), num == episodeNum {
+            return true
+        }
+        
+        // 3. NxNN format: 1x01
+        let xPattern = "\\d+x(\\d+)"
+        if let regex = try? NSRegularExpression(pattern: xPattern),
+           let match = regex.firstMatch(in: filename, range: NSRange(filename.startIndex..., in: filename)),
+           let range = Range(match.range(at: 1), in: filename),
+           let num = Int(filename[range]), num == episodeNum {
+            return true
+        }
+        
+        return false
     }
 }
 
